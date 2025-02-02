@@ -7,7 +7,7 @@ output:
     collapsed: false
     number_sections: false
     toc_depth: 2
-    code_folding: hide
+    #code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -20,8 +20,7 @@ library(dplyr)
 library(webshot)
 library(webshot2)
 ```
-First try out these exercises yourself. You can click <tt>Show</tt> to view the
-solution.
+Try these exercises yourself first without looking at the solutions.
 
 # Data Manipulation & Visualization
 
@@ -1101,102 +1100,233 @@ ggplotly(cor_plot)
 ```
 
 
-You can add more headers by adding more hashtags. These won't be put into the table of contents
 
-### third level header
+# User-Defined Custom Functions
 
-Here's an even lower level header
+### Introduction
 
-# My second post (note the order)
+This project involves writing functions in R to rank hospitals based on various conditions, such as specific health outcomes like heart attack within a state and overall ranking as well. The assignment involves working with data from the Hospital Compare website run by the U.S. Department of Health and Human Services. The dataset contains information about the quality of care at over 4,000 Medicare-certified hospitals in the U.S., focusing on 30-day mortality and readmission rates for heart attacks, heart failure, and pneumonia.
 
-2018 | 7 | 23 Last compiled: `r Sys.Date()`
+### Data
 
-I'm writing this tutorial going from the top down. And, this is how it will be printed. So, notice the second post is second in the list. If you want your most recent post to be at the top, then make a new post starting at the top. If you want the oldest first, do, then keep adding to the bottom
+The Hospital Compare web site contains a lot of data but we will look at the following two files for this assignment
 
-# Adding R stuff
+<tt> outcome-of-care-measures.csv</tt> : Information about 30-day mortality and readmission rates for heart attacks, heart failure, and pneumonia.
+hospital-data.csv: Information about each hospital.
+Instructions
 
-So far this is just a blog where you can write in plain text and serve your writing to a webpage. One of the main purposes of this lab journal is to record your progress learning R. The reason I am asking you to use this process is because you can both make a website, and a lab journal, and learn R all in R-studio. This makes everything really convenient and in the sam place. 
+## 1. Finding the Best Hospital in a State
 
-So, let's say you are learning how to make a histogram in R. For example, maybe you want to sample 100 numbers from a normal distribution with mean = 0, and standard deviation =1, and then you want to plot a histogram. You can do this right here by using an r code block, like this:
+1. Write a function best that takes two arguments: the abbreviated name of a state and an outcome name.
+ The function returns the name of the hospital with the lowest 30-day mortality for the specified outcome in that state.
+```{r echo=TRUE}
 
-```{r}
-samples <- rnorm(100, mean=0, sd=1)
-hist(samples)
-```
-
-When you knit this R Markdown document, you will see that the histogram is printed to the page, along with the R code. This document can be set up to hide the R code in the webpage, just delete the comment (hashtag), from the cold folding option in the yaml header up top. For purposes of letting yourself see the code, and me see the code, best to keep it the way that it is. You learn all of these things and more can be customized in each R code block.
-
-# The big idea
-
-Use this lab journal to record what you do in R. This way I will be able to see what you are doing and help you along the way. You will also be creating a repository of all the things you do. You can make posts about everything. Learning specific things in R (project unrelated), and doing things for the project that we will discuss at the beginning of the Fall semester. You can get started now by fiddling around with googling things, and trying stuff out in R. I've placed some helpful starting links in the links page on this website
-
-# What can you do right now by yourself?
-
-It's hard to learn programming when you don't have specific problems that you are trying to solve. Everything just seems abstract.
-
-I wrote an [introductory programming book that introduces R](https://crumplab.github.io/programmingforpsych/), and gives some [concrete problems for you to solve](https://crumplab.github.io/programmingforpsych/programming-challenges-i-learning-the-fundamentals.html). 
-
-To get the hang of journaling and solving the problems to learn programming, my suggestion is that you use this .Rmd file to solve the problems. It would look like this:
-
-# Problem 1
-
-Do simple math with numbers, addition, subtraction, multiplication, division
-
-```{r}
-1+2
-2*5
-5/3
-(1+6+4)/5
-
-```
-
-# Problem 2
-
-Put numbers into variables, do simple math on the variables
-
-```{r}
-a<-1
-b<-2
-a+b
-
-d<-c(1,2,3)
-e<-c(5,6,7)
-d+e
-d*e
-d/e
-
-```
-
-# Problem 3
-
-Write code that will place the numbers 1 to 100 separately into a variable using for loop. Then, again using the seq function.
-
-```{r}
-# for loop solution
-# i becomes the number 1 to 100 at each step of the loop
+rm(list=ls())
 
 
-a <- length(100) # make empty variable, set length to 100
-for (i in 1:100){
-  a[i] <-i #assigns the number in i, to the ith index of a
+best<-function(State="AK",Outcome="heart attack"){
+        
+        #Read outcome data
+        outcome_<-read.csv("outcome-of-care-measures.csv", colClasses = "character")
+        
+        #Check if State is valid
+        if (!State %in% unique(outcome_$State) )  {
+                stop("Invalid state")
+        } 
+        
+        #Check if Outcome is valid
+        if (!Outcome %in% c("heart attack","heart failure","pneumonia")) {
+                stop("Invalid outcome")
+        }
+        
+        #Data Manipulation
+        outcome1<-outcome_ %>% dplyr::select("Hospital.Name", "State",                                                            starts_with("Hospital.30.Day")) %>% 
+                rename_with(~gsub("^Hospital.30(\\.+\\w+)(\\.+\\w+)\\.\\.(Mortality)\\.\\.Rates\\.from\\.","",.x)) %>%
+                rename_with(~tolower(gsub("\\."," ",.x))) %>%
+                mutate(
+                        outcome = suppressWarnings(as.numeric(!!sym(Outcome)))
+                      ) %>% 
+                arrange(state, outcome, `hospital name`) %>% 
+                group_by(state) %>% 
+                slice(1) %>%
+                filter(!is.na(`hospital name`) & !is.na(outcome) & state==State)
+        
+        return(outcome1[,1])
 }
 
-print(a)
+best()
 
-# for loop solution #2
+best("NY","pneumonia")
 
-a<-c() #create empty variable using combine command
-for (i in 1:100){
-  a<-c(a,i) # keeps combining a with itself and the new number in i
-}
-print(a)
+best("AK","pneumonia")
 
-# seq solution
-a <- seq(1,100,1) # look up help for seq using ?seq() in console
-print(a)
+best("SC","heart attack")
+
 
 ```
 
-# Replace this with problem 4
 
-And keep going. Try to solve the problems with different scripts that provide the same solution. Good luck, Happy coding.
+## 2. Ranking Hospitals by Outcome in a State
+
+1. Write a function rankhospital that takes three arguments: the abbreviated name of a state (state), an outcome (outcome), and the ranking of a hospital in that state for that outcome (num).
+The function returns the name of the hospital with the specified ranking for the given outcome in that state. For example,  call
+
+    a.) <tt> rankhospital("NC", "heart attack","worst")</tt>
+
+    b.) <tt>rankhospital("WA","heart attack", "7")</tt>
+
+    c.) <tt>rankhospital("TX","pneumonia", "10")</tt>
+
+    d.) <tt>rankhospital("NY","heart attack", "7")</tt>
+
+- The ranking of the hospital- argument <tt>num</tt> in the function can take values best, worst or an integer indicating the ranking (small numbers are better)
+- If the number given by num is larger than the number of hostpitals in that state, then the function should return NA.
+- Hospitals that do not have data on a particular outcome should be excluded from the set of hospitals when deciding the rankings.
+- Handling ties: If multiple hospitals have the same 30-day mortality rate for a given cause of death, those ties should be broken by using the hospital name whose letter of alphabet appear first.
+
+```{r echo = TRUE}
+rm(list=ls())
+
+rankhospital<-function(State="AK",Outcome="heart attack",num="best"){
+        
+        #Read outcome data
+        outcome_<-read.csv("outcome-of-care-measures.csv", colClasses = "character")
+        
+        #Check if State is valid
+        if (!State %in% unique(outcome_$State) )  {
+                stop("Invalid State")
+        } 
+        
+        #Check if Outcome is valid
+        if (!Outcome %in% c("heart attack","heart failure","pneumonia")) {
+                stop("Invalid outcome")
+        }
+        
+        #Data Manipulation
+        outcome1<-outcome_ %>%                                                              dplyr::select("Hospital.Name","State",starts_with("Hospital.30.Day")) %>% 
+                rename_with(~gsub("^Hospital.30(\\.+\\w+)(\\.+\\w+)\\.\\.(Mortality)\\.\\.Rates\\.from\\.","",.x)) %>%
+                rename_with(~tolower(gsub("\\."," ",.x))) %>% 
+                mutate(
+                        outcome = suppressWarnings(as.numeric(!!sym(Outcome)))
+                ) %>% 
+                filter(!is.na(`hospital name`) & !is.na(outcome) & state == State)%>%
+                arrange(state, outcome, `hospital name`) %>% 
+                group_by(state) %>% 
+                mutate(rank = row_number(),
+                       no_hspt = last(rank),#total number of hospitals- retain last value of rank"
+                       rank_c = case_when(rank == 1                  ~"best",
+                                          rank == no_hspt & rank>1   ~"worst",
+                                          TRUE                       ~as.character(rank)
+                       )
+                ) 
+        #If you filter outcome1 first based on 'num', it might return 0 records incase num value
+        #provided is not in the dataset. Thus the subsequent check criteria may fail.
+        
+        #Check for digits only- \\d+
+        if (regexpr("\\d+",num)>= 1){
+                if (as.numeric(num) > max(outcome1$no_hspt)) {return(NA)}
+                else {  outcome2<-outcome1 %>% filter(rank_c == num)
+                return(outcome2[1,1])
+                }
+        }
+        
+        #Non-numeric--"Best" and "Worst"
+        else {
+                outcome2<-outcome1 %>% filter(rank_c == num)
+                return(outcome2[1,1])
+        }
+        
+}
+
+rankhospital("NC", "heart attack","worst")
+
+rankhospital("WA","heart attack", "7")
+
+rankhospital("TX","pneumonia", "10")
+
+rankhospital("NY","heart attack", "7")
+
+
+```
+
+## 3. Ranking Hospitals in All States
+1. Write a function <tt>rankall</tt> that takes two arguments: an outcome name (outcome) and a hospital ranking (num).
+The function returns a 2-column data frame containing the hospital in each state with the specified ranking for the given outcome.
+- Make sure a value is returned for every state even if it has no entry specified in the hospital ranking (num). The value returned in such a case is NA.
+
+- The ranking of the hospital- argument num in the function can take values best, worst or an integer indicating the ranking (small numbers are better).
+- Hospitals that do not have data on a particular outcome should be excluded from the set of hospitals when deciding the rankings.
+- Handling ties: The rankall function should handle ties in the 30-day mortality rates in the same way that the rankhospital function handles ties.
+
+```{r echo= T}
+rm(list=ls())
+
+rankall<-function(Outcome = "heart attack",num = "best"){
+        
+        #Read outcome data
+        outcome_<-read.csv("outcome-of-care-measures.csv", colClasses = "character")
+        
+        
+        #Check if Outcome is valid
+        if (!Outcome %in% c("heart attack","heart failure","pneumonia")) {
+                stop("Invalid outcome")
+        }
+        
+        #Data Manipulation
+        outcome1<-outcome_ %>%                                                              dplyr::select("Hospital.Name","State",starts_with("Hospital.30.Day")) %>% 
+                rename_with(~gsub("^Hospital.30(\\.+\\w+)(\\.+\\w+)\\.\\.(Mortality)\\.\\.Rates\\.from\\.","",.x)) %>%
+                rename_with(~tolower(gsub("\\."," ",.x))) %>% 
+                mutate(
+                        outcome = suppressWarnings(as.numeric(!!sym(Outcome)))
+                ) %>% 
+                dplyr::filter(!is.na(`hospital name`) & !is.na(outcome) )%>%
+                arrange(state, outcome, `hospital name`) %>% 
+                group_by(state) %>% 
+                mutate(rank = row_number(),
+                       no_hspt = last(rank),#total number of hospitals- retain last value of rank"
+                       rank_c = case_when(rank == 1                 ~"best",
+                                          rank == no_hspt & rank>1  ~"worst",
+                                          TRUE                      ~as.character(rank)
+                       )
+                ) 
+        #If you filter outcome1 first based on 'num', it might return 0 records in case num value
+        #provided is not in the dataset. Thus the subsequent check criteria may fail.
+        
+        #Check for digits only- \\d+
+        if (regexpr("\\d+",num)>= 1){
+                if (as.numeric(num) > max(outcome1$no_hspt)) {return(NA)}
+                else {  outcome2<-outcome1 %>% filter(rank_c == num)
+                full<-expand.grid(state = unique(outcome1$state),`hospitalname_` = NA_character_)
+                full1<-left_join(full,outcome2, by = "state") %>% 
+                        mutate(hospitalname = ifelse(!is.na(`hospital name`),`hospital name`, hospitalname_ ))  %>% 
+                        dplyr::select ("hospitalname",state)     
+                return(full1) 
+                }
+        }
+        
+        #Non-numeric--"Best" and "Worst"
+        else {
+                outcome3<-outcome1 %>% filter(rank_c == num)
+                full<-expand.grid(state = unique(outcome1$state),`hospitalname_` = NA_character_)
+                full1<-left_join(full,outcome3, by = "state") %>% 
+                        mutate(hospitalname = ifelse(!is.na(`hospital name`),`hospital name`, hospitalname_ ))  %>% 
+                        dplyr::select ("hospitalname",state)     
+                return(full1) 
+        }
+        
+}
+
+
+r<-rankall("heart attack","4")
+as.character(subset(r,state == "HI")$hospitalname)
+
+r<-rankall("pneumonia","worst")
+as.character(subset(r,state == "NJ")$hospitalname)
+
+r<-rankall("heart failure",10)
+as.character(subset(r,state == "NV")$hospitalname)
+```
+
+
+
+

@@ -24,21 +24,25 @@ Before diving into Clinical Reporting in R, we first provide solutions to basic 
 plots. Try to solve the exercises yourself first! Practice ! Click the button 
 <tt>Show</tt> for the solution.
 
-The second project is a Shift Table. With both basic and advanced data 
-manipulation techniques, this should be easy to follow through. Familiarity with creation of custom functions is encouraged- better than copy and paste!
+In the second part, we define our own functions. If you find yourself copying and pasting code to make edits, pause and consider creating a function instead.
 
-The third project is a Progression Free Survival (PFS) table. Here, a high-level
+The third project involves creating a Shift Table. With both basic and advanced data manipulation techniques, this should be easy to follow. While familiarity with custom function creation is encouraged, it is not required.
+
+The fourth project is a Progression Free Survival (PFS) table. Here, a high-level
 understanding of Survival analysis is a requirement!
 
 ## Projects covered
 
 1. Data Manipulation & Visualization
 - Tidyverse & dplyr for efficient data wrangling
-- Custom function creation for reusability
 - Graphs and plots with ggplot2 
 - Interactive plots
 
-2. ECG Shift Table
+2. User-Defined Custom function
+- Re-usability and clean code!
+- Better than copy and paste!
+
+3. ECG Shift Table
 
 3. PFS Table
 
