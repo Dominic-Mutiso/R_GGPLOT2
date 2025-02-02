@@ -23,3 +23,5 @@ mlbench
 plotly
 htmlwidgets
 GGally
+haven
+flextable

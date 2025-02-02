@@ -1327,6 +1327,66 @@ r<-rankall("heart failure",10)
 as.character(subset(r,state == "NV")$hospitalname)
 ```
 
+# ECG Shift Table
 
+### Overview
+
+Shift tables display the change in the frequency of subjects across specified categories from baseline to post-baseline time points. They are commonly used in clinical data to show shifts in the values of laboratory parameters, ECG interpretations, or other ordinal variables of interest across visits, providing a comparison between treatment groups (Jenna Cody, 2019).
+
+### Steps:
+
+#### 1. Load the required libraries.
+By now, you should be familiar with most of the packages used here.
+
+```{r echo = T}
+library(haven,warn.conflicts = FALSE)
+
+library(dplyr,warn.conflicts = FALSE)
+
+library(tidyverse,warn.conflicts = FALSE)
+
+library(flextable)
+
+library(janitor)
+
+```
+
+#### 2. Import the required files
+In our case we need <tt>ADSL</tt> and <tt>ADEG</tt> datasets.
+
+```{r echo = T}
+adeg <- read_sas("C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/adeg.sas7bdat")
+
+adsl <- read_sas("C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/adsl.sas7bdat")
+
+nrow(adeg)
+
+nrow(adsl)
+
+colnames(adeg)
+
+names(adsl)
+
+
+```
+
+
+
+
+#### 3. Get Big N
+These counts display the total number of subjects in each treatment group at the top level of the report headers. See how we use <tt>rbind</tt> and <tt>transform</tt>
+to get the treatment total, that is, <tt>trt01an = 3</tt>
+
+```{r echo = T}
+
+big_n <- rbind(adsl, transform(adsl,TRT01AN = 3)) %>% 
+  group_by(TRT01AN) %>% 
+  filter  (SAFFL == "Y") %>%
+  summarise(count = n())
+
+print(big_n)
+
+
+```
 
 
