@@ -16,7 +16,7 @@ output: html_document
 
 <div class="row" style="padding-top: 30px;">
 
-This project is structured to help you build essential R skills while working with real-world  data.
+This project is designed to help you develop essential R skills and progress to more advanced levels.
 
 # **Clinical R Programming**
 
@@ -44,7 +44,7 @@ understanding of Survival analysis is a requirement!
 
 3. ECG Shift Table
 
-3. PFS Table
+3. Progression-Free Survival (PFS) Table
 
 
 
