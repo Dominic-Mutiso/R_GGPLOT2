@@ -6,6 +6,4 @@ navbar:
       href: index.html
     - text: "R PROJECT"
       href: Journal.html
-    - text: "Links"
-      href: Links.html
 output_dir: "docs"

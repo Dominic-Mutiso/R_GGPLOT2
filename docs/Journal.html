@@ -331,9 +331,6 @@ div.tocify {
 <li>
   <a href="Journal.html">R PROJECT</a>
 </li>
-<li>
-  <a href="Links.html">Links</a>
-</li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
         
@@ -746,8 +743,10 @@ nrow(Boston2)</code></pre>
  geom_smooth(method = lm, se = F) +theme_gray() +
                 plot_annotation(caption = &quot;Figure 6.1&quot;, 
                         theme = theme(plot.caption = element_text(hjust = 0.5)))</code></pre>
-<p><img src="Journal_files/figure-html/unnamed-chunk-22-1.png" width="672" />
-### Solution Q6.4</p>
+<p><img src="Journal_files/figure-html/unnamed-chunk-22-1.png" width="672" /></p>
+</div>
+<div id="solution-q6.4" class="section level3">
+<h3>Solution Q6.4</h3>
 <pre class="r"><code>outlier&lt;- Boston2 %&gt;% filter( rm&lt;5 | rm &gt; 8.75) %&gt;%
         mutate(vjust  = ifelse(rm == 3.561, -1.0, 1.7)
               , hjust = ifelse(rm == 3.561, 0.1, 1.1)
@@ -1895,7 +1894,7 @@ rankhospital&lt;-function(State=&quot;AK&quot;,Outcome=&quot;heart attack&quot;,
         }
         
         #Data Manipulation
-        outcome1&lt;-outcome_ %&gt;%                                                              dplyr::select(&quot;Hospital.Name&quot;,&quot;State&quot;,starts_with(&quot;Hospital.30.Day&quot;)) %&gt;% 
+        outcome1&lt;-outcome_%&gt;%      dplyr::select(&quot;Hospital.Name&quot;,&quot;State&quot;,starts_with(&quot;Hospital.30.Day&quot;)) %&gt;% 
                 rename_with(~gsub(&quot;^Hospital.30(\\.+\\w+)(\\.+\\w+)\\.\\.(Mortality)\\.\\.Rates\\.from\\.&quot;,&quot;&quot;,.x)) %&gt;%
                 rename_with(~tolower(gsub(&quot;\\.&quot;,&quot; &quot;,.x))) %&gt;% 
                 mutate(
@@ -2125,12 +2124,13 @@ shell does not contain the post-baseline and baseline result value as
 
 nrow(adsl1)</code></pre>
 <pre><code>## [1] 123</code></pre>
-<div id="treatment-total" class="section level5">
-<h5>Treatment Total</h5>
+</div>
+<div id="treatment-total" class="section level4">
+<h4>5. Treatment Total</h4>
 <p>Use <tt>rbind</tt> or <tt>bind_rows</tt> to duplicate the created
 data frame and use <tt>mutate</tt> or <tt>transform</tt> within
 <tt>rbind</tt> to assign <tt>trt01an = 3</tt>, which represents the
-treatment total.</p>
+treatment total. We do this for <tt>adsl</tt> and <tt>adeg</tt></p>
 <pre class="r"><code>missing_rows &lt;- adsl1 %&gt;%
              bind_rows (mutate(adsl1, TRT01AN = 3)) %&gt;%
              select(USUBJID, TRT01AN, BASEC ,AVALC, AVISITN, AVISIT, SAFFL) %&gt;%
@@ -2146,7 +2146,200 @@ nrow(missing_rows)</code></pre>
 ## 3 DBAA100001       2 Missing Missing      12 Week 16     Y
 ## 4 DBAA100001       3 Missing Missing       8  Week 4     Y
 ## 5 DBAA100001       3 Missing Missing      11 Week 12     Y</code></pre>
+<pre class="r"><code>adeg1 &lt;- rbind(adeg, transform(adeg, TRT01AN = 3)) %&gt;% 
+  select  (USUBJID, AVISITN, AVISIT, PARAM, TRT01AN, AVALC, BASEC) 
+
+nrow(adeg1)</code></pre>
+<pre><code>## [1] 318</code></pre>
+<pre class="r"><code>tail(adeg1)</code></pre>
+<pre><code>## # A tibble: 6 × 7
+##   USUBJID    AVISITN AVISIT    PARAM          TRT01AN AVALC        BASEC        
+##   &lt;chr&gt;        &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;            &lt;dbl&gt; &lt;chr&gt;        &lt;chr&gt;        
+## 1 EJAA300004       1 Screening Interpretation       3 Abnormal-CS  &quot;&quot;           
+## 2 EJAA300004       6 Baseline  Interpretation       3 Abnormal-CS  &quot;Abnormal-CS&quot;
+## 3 EJAA300004       8 Week 4    Interpretation       3 Abnormal-CS  &quot;Abnormal-CS&quot;
+## 4 EJAA400009       1 Screening Interpretation       3 Abnormal-NCS &quot;&quot;           
+## 5 EJAA400009       6 Baseline  Interpretation       3 Abnormal-NCS &quot;Abnormal-NC…
+## 6 EJAA400009       8 Week 4    Interpretation       3 Abnormal-NCS &quot;Abnormal-NC…</code></pre>
 </div>
+<div id="update-missing-rows" class="section level4">
+<h4>6. Update Missing Rows</h4>
+<p>The <tt>ADEG</tt> dataset contains the actual baseline
+<tt>(AVALC)</tt> and post-baseline values <tt>(BASEC)</tt>. The dataset
+created using the <tt>expand.grid</tt> function has all possible visits
+a subject can have with <tt>AVALC</tt> and <tt>BASEC</tt> values
+assigned as ‘Missing’. Update this with the actual values after doing a
+<tt>left_join</tt>. You can use <tt>ifelse</tt> or <tt>coalesce</tt>
+depending on your preference. If a subject has no actual value from
+<tt>ADEG</tt>, those values will remain as “Missing”</p>
+<pre class="r"><code>adeg02&lt;- missing_rows %&gt;% 
+  left_join (adeg1, by = c(&quot;USUBJID&quot;, &quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;TRT01AN&quot;)) %&gt;%
+  mutate (BASEC_ = ifelse(!is.na(BASEC.y), BASEC.y, BASEC.x),
+          AVALC_ = coalesce(AVALC.y, AVALC.x)
+  ) %&gt;% 
+  filter(SAFFL == &quot;Y&quot; &amp; AVISITN &gt; 6 &amp; BASEC_ != &quot;&quot; &amp; AVALC_ != &quot;&quot;) %&gt;%
+  select (-starts_with(c(&quot;BASEC.&quot;, &quot;AVALC.&quot;))) 
+
+head(adeg02, 4)</code></pre>
+<pre><code>##      USUBJID TRT01AN AVISITN  AVISIT SAFFL          PARAM       BASEC_
+## 1 DBAA100001       2       8  Week 4     Y Interpretation Abnormal-NCS
+## 2 DBAA100001       2      11 Week 12     Y           &lt;NA&gt;      Missing
+## 3 DBAA100001       2      12 Week 16     Y           &lt;NA&gt;      Missing
+## 4 DBAA100001       3       8  Week 4     Y Interpretation Abnormal-NCS
+##         AVALC_
+## 1 Abnormal-NCS
+## 2      Missing
+## 3      Missing
+## 4 Abnormal-NCS</code></pre>
+</div>
+<div id="get-frequency-counts" class="section level4">
+<h4>7. Get Frequency Counts</h4>
+<p>We have created a user-defined function to get the counts at
+different grouping levels. The <tt>group_by_at()</tt> function is used
+to dynamically specify the grouping variables. This is useful when you
+want to pass a variable or a list of variables as arguments to a
+function. The following functions play a similar role:
+<tt>group_by(pick(all_of(group)))</tt> or
+<tt>group_by(across(all_of(group)))</tt>.</p>
+<pre class="r"><code>f_summary &lt;- function(group = c(&quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;TRT01AN&quot;, &quot;BASEC_&quot;, &quot;AVALC_&quot;)){
+  adeg02 %&gt;%
+    group_by_at(group) %&gt;% #Dynamic grouping- var&#39;s passed as arguments to a f()
+    summarise(count = n(), .groups = &quot;drop&quot;)
+  
+}</code></pre>
+<pre class="r"><code>#Call the the Summary Function
+
+result1&lt;-f_summary()
+
+#column total- 
+result2&lt;-f_summary(c(&quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;TRT01AN&quot;, &quot;AVALC_&quot;))
+
+#subject at baseline.
+result3&lt;-f_summary(c(&quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;TRT01AN&quot;, &quot;BASEC_&quot;))
+
+#subject at baseline(Total).
+result4&lt;-f_summary(c(&quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;TRT01AN&quot;))
+
+#Append result1--result4
+results&lt;-result1 %&gt;% bind_rows(result2) %&gt;% bind_rows(result3) %&gt;%
+                bind_rows(result4) %&gt;%
+                mutate(across(c(AVALC_, BASEC_), ~ifelse(is.na(.), &quot;Total&quot;, .)) 
+                        )
+
+head (results)</code></pre>
+<pre><code>## # A tibble: 6 × 6
+##   AVISITN AVISIT TRT01AN BASEC_       AVALC_       count
+##     &lt;dbl&gt; &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;        &lt;chr&gt;        &lt;int&gt;
+## 1       8 Week 4       1 Abnormal-CS  Abnormal-CS      2
+## 2       8 Week 4       1 Abnormal-NCS Abnormal-NCS     9
+## 3       8 Week 4       1 Abnormal-NCS Normal           1
+## 4       8 Week 4       1 Missing      Missing          2
+## 5       8 Week 4       1 Normal       Normal           4
+## 6       8 Week 4       2 Abnormal-NCS Abnormal-NCS     9</code></pre>
+<pre class="r"><code>tail (results)</code></pre>
+<pre><code>## # A tibble: 6 × 6
+##   AVISITN AVISIT  TRT01AN BASEC_ AVALC_ count
+##     &lt;dbl&gt; &lt;chr&gt;     &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;  &lt;int&gt;
+## 1      11 Week 12       1 Total  Total     18
+## 2      11 Week 12       2 Total  Total     21
+## 3      11 Week 12       3 Total  Total     39
+## 4      12 Week 16       1 Total  Total     18
+## 5      12 Week 16       2 Total  Total     21
+## 6      12 Week 16       3 Total  Total     39</code></pre>
+<p>Why is <tt>group_by(group)</tt> wrong?</p>
+<p>Using <tt>group_by(group)</tt> treats <tt>group</tt> as a single
+variable name, so it looks for a column literally named <tt>group</tt>
+in our data frame, which does not exist. R does not interpret
+<tt>group</tt> as a vector of column names to be used for grouping.
+Therefore, a dynamic approach is required to select and use the column
+names.</p>
+</div>
+<div id="dummy-shell" class="section level4">
+<h4>8. Dummy Shell</h4>
+<p>The “dummy shell” ensures that all possible combinations of certain
+grouping variables are present in the dataset, even if some of them are
+missing in the actual data. Initialize the <tt>count</tt> variable to
+zero and update it with the actual count data. This requires merging
+using <tt>left_join</tt>.</p>
+<pre class="r"><code>#Method 1 using expand.grid function
+shell&lt;-expand.grid(AVISITN = unique(results$AVISITN)
+                  , BASEC_ = unique(results$BASEC_)
+                  , AVALC_ = unique(results$AVALC_)
+                  , TRT01AN = unique(results$TRT01AN)) %&gt;% 
+       arrange(AVISITN, TRT01AN, BASEC_) %&gt;%
+      distinct (AVISITN, TRT01AN, BASEC_, AVALC_, .keep_all = TRUE) %&gt;%
+     mutate(count = 0, AVISIT = case_when (AVISITN == 8  ~ &quot;Week 4&quot; 
+                                          , AVISITN == 11 ~ &quot;Week 12&quot;
+                                          , .default =      &quot;Week 16&quot; )
+           )
+
+head(shell, 4)</code></pre>
+<pre><code>##   AVISITN      BASEC_       AVALC_ TRT01AN count AVISIT
+## 1       8 Abnormal-CS  Abnormal-CS       1     0 Week 4
+## 2       8 Abnormal-CS Abnormal-NCS       1     0 Week 4
+## 3       8 Abnormal-CS       Normal       1     0 Week 4
+## 4       8 Abnormal-CS      Missing       1     0 Week 4</code></pre>
+</div>
+<div id="merge-shell-with-results-dataset" class="section level4">
+<h4>9. Merge Shell with RESULTS dataset</h4>
+<p>Update the zero’s with the real values. If no real value is found,
+the value 0 stands.</p>
+<pre class="r"><code>reshell&lt;-left_join(shell, results, by = c(&quot;AVISITN&quot;, &quot;AVISIT&quot;, &quot;BASEC_&quot;, &quot;AVALC_&quot;, &quot;TRT01AN&quot;)) %&gt;%
+  mutate(count = coalesce(count.y, count.x)) %&gt;% 
+  select (-c(count.y, count.x)) %&gt;%
+  arrange(AVISITN, TRT01AN)
+
+head(reshell, 5) %&gt;% select(AVISITN, TRT01AN, count)</code></pre>
+<pre><code>##   AVISITN TRT01AN count
+## 1       8       1     2
+## 2       8       1     0
+## 3       8       1     0
+## 4       8       1     0
+## 5       8       1     2</code></pre>
+</div>
+<div id="calculate-percentages" class="section level4">
+<h4>10. Calculate Percentages</h4>
+<p>Percentage in a particular cell is calculated as follows: the number
+of subjects in that particular cell divided by the total number of
+subjects per visit per treatment group multiplied by 100.</p>
+<pre class="r"><code>reshell1&lt;- reshell %&gt;% 
+         group_by (AVISITN, TRT01AN) %&gt;%
+         mutate   (den  = last(count)
+                 , count_c = sprintf(&quot;%3d&quot;, count)
+                 , perc_ = sprintf(&quot;%5.1f&quot;, round(count/den*100,1))
+                 , count_per = paste(count_c, &quot; (&quot;, perc_, &quot;)&quot;, sep=&quot;&quot;)
+                 , order_avalc = match(AVALC_, c(&quot;Normal&quot;
+                                                 , &quot;Abnormal-NCS&quot;
+                                                 , &quot;Abnormal-CS&quot;,&quot;Missing&quot;
+                                                 , &quot;Total&quot;))
+                , order_basec = match(BASEC_, c(&quot;Normal&quot;, &quot;Abnormal-NCS&quot;
+                                                , &quot;Abnormal-CS&quot;
+                                                , &quot;Missing&quot;, &quot;Total&quot;))
+  ) %&gt;%
+  arrange(AVISITN, TRT01AN, order_avalc, order_basec) %&gt;% 
+  ungroup %&gt;% #to help me drop AVISITN 
+  select(-c(den, count, count_c, perc_, order_avalc, order_basec, AVISITN))
+
+head(reshell1, 4)</code></pre>
+<pre><code>## # A tibble: 4 × 5
+##   BASEC_       AVALC_ TRT01AN AVISIT count_per    
+##   &lt;chr&gt;        &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;  &lt;chr&gt;        
+## 1 Normal       Normal       1 Week 4 &quot;  4 ( 22.2)&quot;
+## 2 Abnormal-NCS Normal       1 Week 4 &quot;  1 (  5.6)&quot;
+## 3 Abnormal-CS  Normal       1 Week 4 &quot;  0 (  0.0)&quot;
+## 4 Missing      Normal       1 Week 4 &quot;  0 (  0.0)&quot;</code></pre>
+</div>
+<div id="transposing-from-narrow-long-to-wide" class="section level4">
+<h4>11. Transposing from Narrow (Long) to Wide</h4>
+<p>The <tt>clean_names()</tt> function comes from the <tt>janitor</tt>
+package and ensures all variable names are consistent in just one line
+of code.</p>
+<pre class="r"><code>t_reshell&lt;-reshell1 %&gt;% 
+  pivot_wider (names_from = c(BASEC_, TRT01AN), values_from = count_per) %&gt;%
+  select(AVISIT, everything()) %&gt;% clean_names()</code></pre>
+<p><img
+src="images/final.png"
+style="width:100.0%" /></p>
 </div>
 </div>
 </div>

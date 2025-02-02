@@ -306,7 +306,9 @@ ggplot(Boston2, aes(rm, medv)) + geom_point(size = 2) +
                         theme = theme(plot.caption = element_text(hjust = 0.5)))
 
 ```
+
 ### Solution Q6.4
+
 ```{r echo=TRUE, warning = FALSE, message =FALSE}
 outlier<- Boston2 %>% filter( rm<5 | rm > 8.75) %>%
         mutate(vjust  = ifelse(rm == 3.561, -1.0, 1.7)
@@ -326,6 +328,7 @@ ggplot(Boston2, aes(rm,medv)) + geom_point(size=2) +
 ```
 
 ### Solution Q6.5
+
 ```{r echo=TRUE, , warning = FALSE, message = F}
 library(ggrepel)
 
@@ -1203,7 +1206,7 @@ rankhospital<-function(State="AK",Outcome="heart attack",num="best"){
         }
         
         #Data Manipulation
-        outcome1<-outcome_ %>%                                                              dplyr::select("Hospital.Name","State",starts_with("Hospital.30.Day")) %>% 
+        outcome1<-outcome_%>%      dplyr::select("Hospital.Name","State",starts_with("Hospital.30.Day")) %>% 
                 rename_with(~gsub("^Hospital.30(\\.+\\w+)(\\.+\\w+)\\.\\.(Mortality)\\.\\.Rates\\.from\\.","",.x)) %>%
                 rename_with(~tolower(gsub("\\."," ",.x))) %>% 
                 mutate(
@@ -1407,8 +1410,8 @@ nrow(adsl1)
 
 ```
 
-##### \qquad \qquad Treatment Total
-Use <tt>rbind</tt> or <tt>bind_rows</tt> to duplicate the created data frame and use <tt>mutate</tt> or <tt>transform</tt> within <tt>rbind</tt> to assign <tt>trt01an = 3</tt>, which represents the treatment total.
+#### 5. Treatment Total
+Use <tt>rbind</tt> or <tt>bind_rows</tt> to duplicate the created data frame and use <tt>mutate</tt> or <tt>transform</tt> within <tt>rbind</tt> to assign <tt>trt01an = 3</tt>, which represents the treatment total. We do this for <tt>adsl</tt> and <tt>adeg</tt>
 
 ```{r echo = T}
 
@@ -1422,7 +1425,151 @@ nrow(missing_rows)
 
 head(missing_rows,5)
 
+adeg1 <- rbind(adeg, transform(adeg, TRT01AN = 3)) %>% 
+  select  (USUBJID, AVISITN, AVISIT, PARAM, TRT01AN, AVALC, BASEC) 
+
+nrow(adeg1)
+
+tail(adeg1)
+
 ```
+#### 6. Update Missing Rows 
+The <tt>ADEG</tt> dataset contains the actual baseline <tt>(AVALC)</tt> and post-baseline values <tt>(BASEC)</tt>. The dataset created using the 
+<tt>expand.grid</tt> function has all possible visits a subject can have with 
+<tt>AVALC</tt> and <tt>BASEC</tt> values assigned as 'Missing'. Update this with the actual values after doing a <tt>left_join</tt>. You can use <tt>ifelse</tt> or <tt>coalesce</tt> depending on your preference. If a subject has no actual value from <tt>ADEG</tt>, those values will remain as "Missing"
+
+```{r echo = T}
+
+adeg02<- missing_rows %>% 
+  left_join (adeg1, by = c("USUBJID", "AVISITN", "AVISIT", "TRT01AN")) %>%
+  mutate (BASEC_ = ifelse(!is.na(BASEC.y), BASEC.y, BASEC.x),
+          AVALC_ = coalesce(AVALC.y, AVALC.x)
+  ) %>% 
+  filter(SAFFL == "Y" & AVISITN > 6 & BASEC_ != "" & AVALC_ != "") %>%
+  select (-starts_with(c("BASEC.", "AVALC."))) 
+
+head(adeg02, 4)
+
+```
+
+#### 7. Get Frequency Counts
+We have created a user-defined function to get the counts at different grouping levels. The <tt>group_by_at()</tt> function is used to dynamically specify the grouping variables. This is useful when you want to pass a variable or a list of variables as arguments to a function. The following functions play a similar role: <tt>group_by(pick(all_of(group)))</tt> or <tt>group_by(across(all_of(group)))</tt>.
+
+```{r echo = T}
+f_summary <- function(group = c("AVISITN", "AVISIT", "TRT01AN", "BASEC_", "AVALC_")){
+  adeg02 %>%
+    group_by_at(group) %>% #Dynamic grouping- var's passed as arguments to a f()
+    summarise(count = n(), .groups = "drop")
+  
+}
+
+```
+
+```{r echo = T}
+#Call the the Summary Function
+
+result1<-f_summary()
+
+#column total- 
+result2<-f_summary(c("AVISITN", "AVISIT", "TRT01AN", "AVALC_"))
+
+#subject at baseline.
+result3<-f_summary(c("AVISITN", "AVISIT", "TRT01AN", "BASEC_"))
+
+#subject at baseline(Total).
+result4<-f_summary(c("AVISITN", "AVISIT", "TRT01AN"))
+
+#Append result1--result4
+results<-result1 %>% bind_rows(result2) %>% bind_rows(result3) %>%
+                bind_rows(result4) %>%
+                mutate(across(c(AVALC_, BASEC_), ~ifelse(is.na(.), "Total", .)) 
+                        )
+
+head (results)
+
+tail (results)
+```
+
+
+
+Why is <tt>group_by(group)</tt> wrong?
+
+Using <tt>group_by(group)</tt> treats <tt>group</tt> as a single variable name, so it looks for a column literally named <tt>group</tt> in our data frame, which does not exist. R does not interpret <tt>group</tt> as a vector of column names to be used for grouping. Therefore, a dynamic approach is required to select and use the column names.
+
+#### 8. Dummy Shell
+The "dummy shell" ensures that all possible combinations of certain grouping variables are present in the dataset, even if some of them are missing in the actual data. Initialize the <tt>count</tt> variable to zero and update it with the actual count data. This requires merging using <tt>left_join</tt>.
+
+```{r echo = T}
+#Method 1 using expand.grid function
+shell<-expand.grid(AVISITN = unique(results$AVISITN)
+                  , BASEC_ = unique(results$BASEC_)
+                  , AVALC_ = unique(results$AVALC_)
+                  , TRT01AN = unique(results$TRT01AN)) %>% 
+       arrange(AVISITN, TRT01AN, BASEC_) %>%
+      distinct (AVISITN, TRT01AN, BASEC_, AVALC_, .keep_all = TRUE) %>%
+     mutate(count = 0, AVISIT = case_when (AVISITN == 8  ~ "Week 4" 
+                                          , AVISITN == 11 ~ "Week 12"
+                                          , .default =      "Week 16" )
+           )
+
+head(shell, 4)
+
+```
+
+#### 9. Merge Shell with RESULTS dataset
+Update the zero's with the real values. If no real value is found, the value 0 stands.
+
+```{r echo = T}
+reshell<-left_join(shell, results, by = c("AVISITN", "AVISIT", "BASEC_", "AVALC_", "TRT01AN")) %>%
+  mutate(count = coalesce(count.y, count.x)) %>% 
+  select (-c(count.y, count.x)) %>%
+  arrange(AVISITN, TRT01AN)
+
+head(reshell, 5) %>% select(AVISITN, TRT01AN, count)
+
+
+```
+
+#### 10. Calculate Percentages
+Percentage in a particular cell is calculated as follows: the number of subjects in that particular cell divided by the total number of subjects per visit per treatment group multiplied by 100.
+
+```{r echo = T}
+reshell1<- reshell %>% 
+         group_by (AVISITN, TRT01AN) %>%
+         mutate   (den  = last(count)
+                 , count_c = sprintf("%3d", count)
+                 , perc_ = sprintf("%5.1f", round(count/den*100,1))
+                 , count_per = paste(count_c, " (", perc_, ")", sep="")
+                 , order_avalc = match(AVALC_, c("Normal"
+                                                 , "Abnormal-NCS"
+                                                 , "Abnormal-CS","Missing"
+                                                 , "Total"))
+                , order_basec = match(BASEC_, c("Normal", "Abnormal-NCS"
+                                                , "Abnormal-CS"
+                                                , "Missing", "Total"))
+  ) %>%
+  arrange(AVISITN, TRT01AN, order_avalc, order_basec) %>% 
+  ungroup %>% #to help me drop AVISITN 
+  select(-c(den, count, count_c, perc_, order_avalc, order_basec, AVISITN))
+
+head(reshell1, 4)
+
+```
+
+#### 11. Transposing from Narrow (Long) to Wide
+The <tt>clean_names()</tt> function comes from the <tt>janitor</tt> package and ensures all variable names are consistent in just one line of code.
+
+```{r echo = T}
+t_reshell<-reshell1 %>% 
+  pivot_wider (names_from = c(BASEC_, TRT01AN), values_from = count_per) %>%
+  select(AVISIT, everything()) %>% clean_names()
+
+
+
+```
+
+![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/final.png){width=100%}
+
 
 
 
