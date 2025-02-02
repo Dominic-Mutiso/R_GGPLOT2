@@ -20,7 +20,7 @@ library(dplyr)
 library(webshot)
 library(webshot2)
 ```
-Try these exercises yourself first without looking at the solutions.
+First try these exercises yourself  without looking at the solutions.
 
 # Data Manipulation & Visualization
 
