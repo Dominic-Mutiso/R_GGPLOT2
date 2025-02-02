@@ -2104,6 +2104,50 @@ print(big_n)</code></pre>
 ## 2       2    22
 ## 3       3    41</code></pre>
 </div>
+<div id="generate-missing-rows" class="section level4">
+<h4>4. Generate Missing Rows</h4>
+<p>Check the mock shell or SAP as this is sometimes optional. Use the
+ADSL dataset, as it contains one record per subject, and assign the
+expected visits <tt>(AVISITN = 8, 11, 12)</tt>. The <tt>expand.grid</tt>
+function creates a data frame from all combinations of the supplied
+vectors. For the baseline <tt>(BASEC)</tt> and post-baseline values
+<tt>(AVALC)</tt>, assign <tt>“Missing”</tt>. If the provided SAP/mock
+shell does not contain the post-baseline and baseline result value as
+<tt>“Missing”</tt>, then you can skip this step.</p>
+<pre class="r"><code>adsl1 &lt;- expand.grid(USUBJID = unique(adsl$USUBJID), AVISITN = c(8, 11, 12)) %&gt;%
+  distinct (USUBJID, AVISITN, .keep_all = TRUE) %&gt;% #ensure no duplicates
+  left_join(adsl, by = &quot;USUBJID&quot;) %&gt;% #retain previous existing variables
+  mutate(AVISIT = case_when(AVISITN == 8  ~ &quot;Week 4&quot;,
+                            AVISITN == 11 ~ &quot;Week 12&quot;,
+                            .default =      &quot;Week 16&quot;),
+         AVALC = &quot;Missing&quot;, BASEC = &quot;Missing&quot; 
+  )   
+
+nrow(adsl1)</code></pre>
+<pre><code>## [1] 123</code></pre>
+<div id="treatment-total" class="section level5">
+<h5>Treatment Total</h5>
+<p>Use <tt>rbind</tt> or <tt>bind_rows</tt> to duplicate the created
+data frame and use <tt>mutate</tt> or <tt>transform</tt> within
+<tt>rbind</tt> to assign <tt>trt01an = 3</tt>, which represents the
+treatment total.</p>
+<pre class="r"><code>missing_rows &lt;- adsl1 %&gt;%
+             bind_rows (mutate(adsl1, TRT01AN = 3)) %&gt;%
+             select(USUBJID, TRT01AN, BASEC ,AVALC, AVISITN, AVISIT, SAFFL) %&gt;%
+             arrange(USUBJID, TRT01AN) 
+
+
+nrow(missing_rows)</code></pre>
+<pre><code>## [1] 246</code></pre>
+<pre class="r"><code>head(missing_rows,5)</code></pre>
+<pre><code>##      USUBJID TRT01AN   BASEC   AVALC AVISITN  AVISIT SAFFL
+## 1 DBAA100001       2 Missing Missing       8  Week 4     Y
+## 2 DBAA100001       2 Missing Missing      11 Week 12     Y
+## 3 DBAA100001       2 Missing Missing      12 Week 16     Y
+## 4 DBAA100001       3 Missing Missing       8  Week 4     Y
+## 5 DBAA100001       3 Missing Missing      11 Week 12     Y</code></pre>
+</div>
+</div>
 </div>
 </div>
 
