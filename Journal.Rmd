@@ -1963,7 +1963,7 @@ complete_data_t
 
 This is the final report, which aligns with the requirements outlined in the mock shell.
 
-![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/pfs.png){width=100%}
+![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/pfs.png){width=50%}
 
 # Baseline Flag
 
