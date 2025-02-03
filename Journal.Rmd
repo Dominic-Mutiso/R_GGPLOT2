@@ -1571,5 +1571,439 @@ t_reshell<-reshell1 %>%
 ![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/final.png){width=100%}
 
 
+# Progression-Free Survival (PFS) Efficacy Table
+
+PFS can be defined as the time from randomisation/ initiation of treatment to disease progression or death from any cause. In most solid tumor oncology trials, Progression-Free Survival (PFS) is used as the primary endpoint. Since PFS involves time-to-event analysis, we use ADTTE (Time-to-Event) ADaM dataset. Basic principles of Survival Analysis such as censoring, hazard and survival functions will play a big role in generating our PFS Efficacy table.
+
+Additionally, we make use of advanced techniques for Non-parametric estimation (Kaplan-Meier), Hypothesis Testing: Non-parametric approach (Log-Rank Test) and Regression Analysis: Cox Proportional Hazards Model (CPHM). Therefore, familiarity with Survival Analysis is required!
+
+### Instructions
+Use the mock shell below to generate a PFS Efficacy table.
+
+- Get the Kaplan-Meier median progression-free survival (PFS) and its 95% C.I based on Brookmeyer-Crowley method.
+- HR together with its 95% CI from a stratified Cox model with HRR status as a strata. The CI will be calculated using a profile likelihood approach. Use EFRON method to control for ties.
+- For generation of the p-value, use a stratified log-rank test with HRR status (mutant versus wildtype) as a strata.
+
+![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/shell.png){width=100%}
+
+### Steps:
+
+### 1. Data Manipulation
+
+Worth noting:
+
+- <tt>Surv()</tt> function in the <tt>{survival}</tt> package accepts by default T/F, where TRUE is the event and False stands for censored. That is, 1 for Event and 0 for censored. Event in our case (PFS) is Death/ Disease Progression coded as 0. Recode to 1 so that R does not take it for "censored". Take care to ensure the Event is properly coded as 1.
+
+- We also need to convert some of the variables to type "factor". Always the first level is used as the baseline/ reference in R. Use <tt>factor()</tt> function to order levels using <tt>levels =</tt> argument. Else use <tt>relevel(, ref = "")</tt> E.g: <tt>trt01pn = relevel(as.factor(trt01pn), ref= "")</tt>. Trt01pn = 1 rep' 'Active drug' and Trt01pn = 2 rep' the 'Placebo'. Failure to use 'levels = " or relevel(), R will by default choose alphabetically or numerically. Consequently, the first occurence which is '1' for Active drug will be the baseline/ ref'. We don't want that! We are comparing Active drug to Placebo.
+```{r echo = T}
+
+adtte <- read_sas("adtte.sas7bdat")
+
+adtte1<-adtte %>% rename_with(tolower) %>% 
+                  select( usubjid, trt01a, trt01an, aval, param, paramcd, cnsr
+                         , evntdesc, stratf1a, stratf2a, trt01pn, trt01p, parqual
+                         ) %>% 
+                  mutate(
+                          aval_months = aval/30.4375
+                        , status      = ifelse(cnsr == 0, 1, 0)
+                        , trt01pn_    = factor(trt01pn, levels = c("2", "1"),
+                                               labels = c("Placebo","Active"))
+                        , stratf1a    = relevel(as.factor(stratf1a), ref = "HRRm")
+                        , check       = regexpr("Progression-free survival",param)
+                        ) %>% 
+                filter (grepl("Progression-free survival", param) == "TRUE" & paramcd == "TRPROGT")
+
+names(adtte1)
+
+class(adtte1$trt01pn_)
+```
+
+### 2. Median Progression Free Survival
+Median PFS is the value of time t where the survival function, S(t), equals 0.5. That is, 50 % of the cohort is event free.
+
+Although Kaplan-Meier survival curves are calculated independently for each group, meaning the order or arrangement of factor levels do not affect the computation of the survival estimates or their confidence intervals, it is good practice to explicitly order the factor levels using <tt>factor(, levels = c())</tt> or <tt>relevel(, ref = "")</tt>. Additionally, any numeric variable intended for grouping should be converted to a factor, rather than allowing R to automatically interpret it for grouping. That is what we did in the previous step "data manipulation" for the numeric variable <tt>trt01pn</tt>.
+
+Argument <tt>type</tt> in <tt>survfit</tt> function is an older argument that combined <tt>stype</tt> and <tt>ctype</tt>, now deprecated. Legal values were "kaplan-meier" which is equivalent to <tt>stype = 1</tt>, <tt>ctype = 1</tt>, <tt>"fleming-harrington"</tt> which is equivalent to <tt>stype = 2</tt>, <tt>ctype = 1</tt>, and <tt>"fh2"</tt> which is equivalent to <tt>stype = 2</tt> and <tt>ctype = 2</tt>.
+
+Load the <tt>survival</tt> package for this step.
+
+
+#### 2.1)  CNSR Coding differences
+##### 2.1.1) Case 1: <tt>0 = "Censored"</tt> and <tt>1 = "Event"</tt>
+```{r echo = T}
+library(survival)
+
+surv<-survfit(Surv(aval_months, status) ~ trt01pn_, data = adtte1,
+                stype = 1, ctype = 1, conf.type = "log-log", conf.int = 0.95 )
+
+print(surv, digits = 4)
+
+names(surv)
+```
+
+##### 2.1.2) Case 2: <tt>0 = "Event"</tt> and <tt>1 = "Censored"</tt>
+
+CDISC ADaM ADTTE dataset has variable cnsr coded as 0 for "Event" and 1 for "Censored". Recall R interprets 1 as "Event" and 0 as "Censored". If you do not want to recode, thanks to <tt>Surv_CNSR()</tt> function from <tt>ggsurvfit</tt> package that takes care of that. It uses CDISC ADaM ADTTE coding conventions- censor = 1, status/event = 0.
+
+```{r echo = T}
+#install.packages("ggsurvfit")
+library(ggsurvfit)
+
+survfit(Surv_CNSR(aval_months, cnsr)~ trt01pn_, data = adtte1, conf.int = 0.95,
+        stype = 1, ctype = 1, conf.type = "log-log")
+
+
+
+```
+
+#### 2.2) Median PFS Dataframe results
+If you require your results for further processing use <tt>surv_median()</tt> function from <tt>survminer</tt> package. One can use results from either case 1 or case 2.
+
+```{r echo = T}
+
+#install.packages("survminer")
+library(survminer)
+
+med_surv<-surv_median(surv)
+
+med_surv
+
+med_surv<- med_surv %>% mutate (
+                                strata = gsub("=", "", strata)
+                              , median = sprintf("%10.1f", median)
+                              , med_ci = paste(sprintf("%5.1f", lower), 
+                                               trimws(sprintf("%5.1f", upper)), 
+                                               sep = " - " 
+                                              )
+                               ) %>% select (-c(lower, upper))
+
+med_surv
+                       
+```
+
+#### 2.3) 25\% 50\% and 75\% survival time and CI
+
+```{r echo = T}
+quantile(surv, probs = c(25,50,75)/100)
+```
+That's all for Median PFS.
+
+### 3. Survival Probability at a Specific Timepoint (6 Months)
+
+For specific time points, we use the summary() function with the argument times =. If the specific time points are of no interest, use surv_summary() from the survminer package. Ultimately, to create a dataframe for the specific time points, one may use names() or str() to view the structure.
+
+```{r echo = T}
+#with all time points at which a curve has a step
+head(surv_summary(surv))
+
+#more than one specified timepoint- 0, 6, 12, 18, 24, 30
+summary(surv, times = c(0, 6*(1:5)))
+
+#one specific timepoint- 6.
+tp<-summary(surv, times = 6)
+
+tp
+
+# Inspect the structure of the summary object
+names(tp)
+
+str(tp)
+
+# Convert the summary to a data frame
+time_pt <- data.frame(
+                        time     = tp$time    
+                      , n.risk   = tp$n.risk  
+                      , n.event  = tp$n.event 
+                      , survival = (tp$surv*100)    
+                      , std.err  = tp$std.err 
+                      , lower    = tp$lower * 100   
+                      , upper    = tp$upper * 100  
+                      , strata   = gsub("=", "", tp$strata)
+)
+
+# View the data frame
+time_pt
+
+time_pt<- time_pt %>% mutate(
+                            survival = sprintf("%10.1f", survival)
+                           ,tp_ci   = paste( sprintf("%5.1f", lower)
+                                           , sprintf("%5.1f", upper)
+                                           , sep= " -"
+                                            )
+                            ) %>% select(strata, survival, tp_ci)
+
+
+time_pt
+```
+
+### 4. Stratified Log-rank test
+Log-rank test- tests whether there is a significant difference in survival between two or more independent groups.
+
+We can use either the <tt>survdiff()</tt> function or a combination of <tt>survfit()</tt> and <tt>surv_pvalue()</tt> to generate the p-value. A combination of <tt>survfit()</tt> and <tt>surv_pvalue()</tt> works best if you require the results for further processing.
+
+#### Option 1: Using <tt>"survdiff"</tt> function
+```{r echo = T}
+#a.)
+survdiff(Surv(aval_months, status)~ trt01pn + strata(stratf1a), adtte1)
+
+#b.)
+pval<-survdiff(Surv_CNSR(aval_months, cnsr)~ trt01pn_ + strata(stratf1a), adtte1)
+print(pval, digits = 6)
+
+###Further manually;
+pval_<- 1 - pchisq(pval$chisq, length(pval$n)-1)
+pval_
+
+```
+
+#### Option 2: Using both <tt>survfit()</tt> and <tt>surv_pvalue()</tt>
+```{r echo = T}
+
+surv1<-survfit(Surv(aval_months, status) ~ trt01pn_ + strata(stratf1a), data = adtte1, 
+              stype = 1, ctype = 1, conf.int = 0.95, conf.type="log-log")
+
+pvalue<-surv_pvalue(surv1)
+
+pvalue
+
+pvalue<-pvalue %>% mutate (
+                             pval   = sprintf("%12.3f", pval)
+                           , strata = sub("\\+(.+)", "Active", variable)
+                           ) %>% select(pval, strata)
+
+pvalue
+```
+
+The <tt>p-value</tt> from the <tt>survdiff()</tt> or <tt>surv_pvalue()</tt> function does not indicate which treatment is superior. It only tells us whether there is a significant difference between the survival curves. Therefore, we should use a survival plot to visually assess which treatment is superior.
+
+```{r echo = T}
+# Plot the survival curves
+plot<-ggsurvplot(surv1, data = adtte1,
+           legend.labs = c("placebo HRRm", "placebo HRRwt", "active HRRm", "active HRRwt"),
+           xlab = "Time in days", 
+           ylab = "Survival probability",
+           ggtheme = theme_minimal(base_size = 15),
+           size = 0.5,  # Reduce line size
+           font.x = c(7),  # Reduce x-axis font size
+           font.y = c(7),  # Reduce y-axis font size
+           font.legend = c(7),  # Reduce legend font size
+           font.tickslab = c(6),
+           palette = c("red", "red", "blue", "blue"),
+           linetype = c("dotted", "solid", "dotted", "solid"),
+           legend = "right"
+           )
+
+
+plot$plot <- plot$plot +
+        guides(color = guide_legend(override.aes = list(shape = NA)),  # Remove the censoring symbol
+               linetype = guide_legend(override.aes = list(shape = NA)))
+
+plot
+
+```
+
+
+From this plot we can observe the following:
+
+1. Within  strata HRRm , active drug is superior to placebo.
+2. Subjects with the wild type HRR status have better survival compared to those with mutant HRR status.
+
+The following can be use for a quick plot
+
+```{r echo = T}
+#ggfortify enables use of autoplot
+#install.packages("ggfortify")
+library(ggfortify)
+
+autoplot(surv1)
+
+```
+
+### 5. Cox Proportional Hazards Model (CPHM)
+
+Used to fit regression models to censored survival data. It accounts for the effects of continuous and discrete covariate (independent variable) measurements when the dependent variable is possibly censored time-to-event data.
+
+It assumes that the effects of the independent variables upon survival are constant over time and are additive in one scale.
+
+When an independent variable is categorical, it’s important to choose a baseline/reference group, as hazard ratios are calculated by comparing the other levels to the reference group.
+
+*Hazard function* is the conditional probability that an event will occur at time *t* having survived to that time.
+
+#### 5.1) Unadjusted Cox Regression
+
+The estimate of the log hazard ratio treatment effect, $\hat{\beta}$ is 0.05214. Since this is positive, higher hazards are associated with the active drug than with the placebo. That is, the active drug appears to reduce survival- quite unfortunate. The value of exp($\hat{\beta}$) is 1.054 meaning the risk of death/disease progression is higher on the active drug by about 5.4\%. 
+
+```{r echo = T}
+cox<-coxph(Surv(aval_months, status) ~ trt01pn_ , data = adtte1
+                          , ties="efron") 
+
+cox
+```
+
+#### 5.2) Adjusted Cox Regression
+
+##### Stratified Cox Model
+
+The coefficient is now negative. This means within each stratification, the active drug is effective. 
+
+```{r echo = T}
+cox<-coxph(Surv(aval_months, status) ~ trt01pn_ + strata(stratf1a), data = adtte1
+                          , ties="efron") 
+
+cox
+
+```
+
+We can also explicitly estimate the stratification effect.
+
+```{r echo = T}
+cox<-coxph(Surv(aval_months, status) ~ trt01pn_ + stratf1a, data = adtte1
+                          , ties="efron") 
+
+summary(cox)
+
+```
+
+Again the co-efficient associated with the active drug is negative. The stratum HRRwt has negative co-efficient and thus is associated with lower hazard than the reference HRRm.
+
+#### Options of viewing results.
+
+1. <tt>summmary()</tt>
+
+2. <tt>tbl_regression</tt>
+- Comes from the gtsummary package.
+- Used to display results in a formatted table
+
+
+```{r echo = T}
+#install.packages("gtsummary")
+ library (gtsummary)
+ cox %>% tbl_regression(exp = T)
+
+```
+
+3. <tt>tidy ()</tt>
+
+Comes from the <tt>broom</tt> package.
+Presents results as a dataframe. Useful if results are required for further processing.
+To explore this function further, use <tt>?tidy.coxph</tt>.
+
+```{r echo = T}
+
+library(broom)  
+
+cox.df<-cox %>% 
+        tidy(conf.int = TRUE, exponentiate = TRUE) %>% 
+        select(term, estimate, starts_with("conf"))
+
+cox.df<-cox.df %>% mutate(
+                           hr    = sprintf("%11.2f", estimate)
+                         , hr_ci = paste(sprintf("%6.2f", conf.low)
+                                       , gsub("^\\s+","",sprintf("%6.2f", conf.high))
+                                       , sep = " - ")
+                         ) %>% 
+        select (strata = term, starts_with("hr"))
+        
+print(cox.df)
+
+```
+
+
+### 6. Reporting Effort
+
+#### Combining the Four Datasets
+
+In this analysis, we have already derived key survival statistical metrics which are stored in the following datasets:
+
+1. **Median Progression-Free Survival (PFS)**: The median survival time is provided in the med_surv dataset.
+
+2. **PFS Rate at 6 Months**: The PFS rate at the 6-month time point is included in the time_pt dataset.
+
+3. **Hazard Ratio**: The hazard ratio is in the cox.df dataset.
+
+4. **2-Sided p-Value**: The 2-sided p-value, obtained through a stratified log-rank test, is available in the pvalue dataset.
+
+These datasets will be combined to create our report and produce a PFS efficacy table using the mock shell provided.
+
+```{r echo=T}
+complete_data<-bind_rows(med_surv, time_pt, cox.df, pvalue)
+
+complete_data
+```
+
+
+### 7. Transpose data to shell format
+
+```{r echo = T}
+complete_data_t<-complete_data %>% pivot_longer(cols=c(median
+                                                       , med_ci
+                                                       , survival
+                                                       , tp_ci
+                                                       , hr, hr_ci, pval ),
+                       names_to="description"
+                       , values_to="stat") %>% 
+        na.omit() %>% 
+        pivot_wider(names_from = strata, values_from = stat) %>%
+        mutate(
+                description = gsub("^medi\\w+", "Median progression-free survival (months)",                                          description) 
+              , description = str_replace(description, "^med_\\w+"
+                                            , "95% CI for Median progression-free survival")
+              , description = gsub("^sur\\w+"
+                  , "Alive and progression-free survival rate at 6 months (APF6) (%)", description) 
+              , description = gsub("^tp_\\w+"
+                            , "95% CI for progression-free survival rate at 6 months", description)
+              , description = gsub("^hr$"
+                  , "Hazard ratio, Active drug versus Placebo (standard treatment)", description )
+              , description = gsub("^hr_\\w+", "95% CI for hazard ratio ", description )
+              , description = gsub("^pval$", "2-sided p-value", description )
+            ) %>% select (description, trt01pn_Active, trt01pn_Placebo)
+
+complete_data_t
+```
+
+This is the final report, which aligns with the requirements outlined in the mock shell.
+
+![](C:/Users/Dominic/Desktop/testGithub/R_GGPLOT2/images/pfs.png){width=100%}
+
+# Baseline Flag
+
+Consider the following VS dataset.
+
+```{r echo = T}
+vs <- data.frame(
+        usubjid = rep(c(01, 02), c(8, 2))                                      ,
+        paramcd = c("AB", "AB", "BA", "BA", "BA", "BA", "CD", "CD", "BA", "BA"),
+        aval    = c(23, 45, 18, 196, 19.2, 8.6, 45, NA, 200, NA)               ,
+        adt     = as.Date (c('2003-09-06', '2003-09-05', '2003-09-05', 
+                             '2003-09-06', '2003-11-21', '2003-10-15',
+                             "2003-09-05", "2003-09-06", "2003-10-01",
+                             "2003-10-02")
+                          )                                                    ,
+        trtsdt  = as.Date(rep("2003-09-07", times=10))
+        )
+
+vs
+```
+
+### Derive baseline flag
+
+To maintain clean code and avoid slicing and re-merging, I use the following logic. This approach is inspired by Mazi 🔵 Ntintelo’s post on 'Deriving Baseline Flags using SAS.
+
+```{r echo = T}
+vs1<- vs %>% 
+        #Check qualifier for baseline flag
+        mutate(anchor = ifelse(!is.na(aval) & !is.na(adt) & adt < trtsdt , 1, 2)) %>%
+        arrange (usubjid, paramcd, anchor, adt) %>%
+        group_by(usubjid, paramcd, anchor) %>%
+        mutate ( nparam = row_number(),
+                 #check if its the last Paramcd i.e npram=lparam
+                 lparam = last(nparam), 
+                 ablfl  = ifelse(lparam == nparam & anchor == 1, "Y", NA)
+        )  %>% 
+        select (-c(nparam, lparam)) 
+
+vs1
+```
+
 
 

@@ -2343,6 +2343,1183 @@ style="width:100.0%" /></p>
 </div>
 </div>
 </div>
+<div id="progression-free-survival-pfs-efficacy-table"
+class="section level1">
+<h1>Progression-Free Survival (PFS) Efficacy Table</h1>
+<p>PFS can be defined as the time from randomisation/ initiation of
+treatment to disease progression or death from any cause. In most solid
+tumor oncology trials, Progression-Free Survival (PFS) is used as the
+primary endpoint. Since PFS involves time-to-event analysis, we use
+ADTTE (Time-to-Event) ADaM dataset. Basic principles of Survival
+Analysis such as censoring, hazard and survival functions will play a
+big role in generating our PFS Efficacy table.</p>
+<p>Additionally, we make use of advanced techniques for Non-parametric
+estimation (Kaplan-Meier), Hypothesis Testing: Non-parametric approach
+(Log-Rank Test) and Regression Analysis: Cox Proportional Hazards Model
+(CPHM). Therefore, familiarity with Survival Analysis is required!</p>
+<div id="instructions" class="section level3">
+<h3>Instructions</h3>
+<p>Use the mock shell below to generate a PFS Efficacy table.</p>
+<ul>
+<li>Get the Kaplan-Meier median progression-free survival (PFS) and its
+95% C.I based on Brookmeyer-Crowley method.</li>
+<li>HR together with its 95% CI from a stratified Cox model with HRR
+status as a strata. The CI will be calculated using a profile likelihood
+approach. Use EFRON method to control for ties.</li>
+<li>For generation of the p-value, use a stratified log-rank test with
+HRR status (mutant versus wildtype) as a strata.</li>
+</ul>
+<p><img
+src="images/shell.png"
+style="width:100.0%" /></p>
+</div>
+<div id="steps-1" class="section level3">
+<h3>Steps:</h3>
+</div>
+<div id="data-manipulation" class="section level3">
+<h3>1. Data Manipulation</h3>
+<p>Worth noting:</p>
+<ul>
+<li><p><tt>Surv()</tt> function in the <tt>{survival}</tt> package
+accepts by default T/F, where TRUE is the event and False stands for
+censored. That is, 1 for Event and 0 for censored. Event in our case
+(PFS) is Death/ Disease Progression coded as 0. Recode to 1 so that R
+does not take it for “censored”. Take care to ensure the Event is
+properly coded as 1.</p></li>
+<li><p>We also need to convert some of the variables to type “factor”.
+Always the first level is used as the baseline/ reference in R. Use
+<tt>factor()</tt> function to order levels using <tt>levels =</tt>
+argument. Else use <tt>relevel(, ref = ““)</tt> E.g: <tt>trt01pn =
+relevel(as.factor(trt01pn), ref=”“)</tt>. Trt01pn = 1 rep’ ‘Active drug’
+and Trt01pn = 2 rep’ the ‘Placebo’. Failure to use ‘levels = ” or
+relevel(), R will by default choose alphabetically or numerically.
+Consequently, the first occurence which is ’1’ for Active drug will be
+the baseline/ ref’. We don’t want that! We are comparing Active drug to
+Placebo.</p></li>
+</ul>
+<pre class="r"><code>adtte &lt;- read_sas(&quot;adtte.sas7bdat&quot;)
+
+adtte1&lt;-adtte %&gt;% rename_with(tolower) %&gt;% 
+                  select( usubjid, trt01a, trt01an, aval, param, paramcd, cnsr
+                         , evntdesc, stratf1a, stratf2a, trt01pn, trt01p, parqual
+                         ) %&gt;% 
+                  mutate(
+                          aval_months = aval/30.4375
+                        , status      = ifelse(cnsr == 0, 1, 0)
+                        , trt01pn_    = factor(trt01pn, levels = c(&quot;2&quot;, &quot;1&quot;),
+                                               labels = c(&quot;Placebo&quot;,&quot;Active&quot;))
+                        , stratf1a    = relevel(as.factor(stratf1a), ref = &quot;HRRm&quot;)
+                        , check       = regexpr(&quot;Progression-free survival&quot;,param)
+                        ) %&gt;% 
+                filter (grepl(&quot;Progression-free survival&quot;, param) == &quot;TRUE&quot; &amp; paramcd == &quot;TRPROGT&quot;)
+
+names(adtte1)</code></pre>
+<pre><code>##  [1] &quot;usubjid&quot;     &quot;trt01a&quot;      &quot;trt01an&quot;     &quot;aval&quot;        &quot;param&quot;      
+##  [6] &quot;paramcd&quot;     &quot;cnsr&quot;        &quot;evntdesc&quot;    &quot;stratf1a&quot;    &quot;stratf2a&quot;   
+## [11] &quot;trt01pn&quot;     &quot;trt01p&quot;      &quot;parqual&quot;     &quot;aval_months&quot; &quot;status&quot;     
+## [16] &quot;trt01pn_&quot;    &quot;check&quot;</code></pre>
+<pre class="r"><code>class(adtte1$trt01pn_)</code></pre>
+<pre><code>## [1] &quot;factor&quot;</code></pre>
+</div>
+<div id="median-progression-free-survival" class="section level3">
+<h3>2. Median Progression Free Survival</h3>
+<p>Median PFS is the value of time t where the survival function, S(t),
+equals 0.5. That is, 50 % of the cohort is event free.</p>
+<p>Although Kaplan-Meier survival curves are calculated independently
+for each group, meaning the order or arrangement of factor levels do not
+affect the computation of the survival estimates or their confidence
+intervals, it is good practice to explicitly order the factor levels
+using <tt>factor(, levels = c())</tt> or <tt>relevel(, ref = ““)</tt>.
+Additionally, any numeric variable intended for grouping should be
+converted to a factor, rather than allowing R to automatically interpret
+it for grouping. That is what we did in the previous step”data
+manipulation” for the numeric variable <tt>trt01pn</tt>.</p>
+<p>Argument <tt>type</tt> in <tt>survfit</tt> function is an older
+argument that combined <tt>stype</tt> and <tt>ctype</tt>, now
+deprecated. Legal values were “kaplan-meier” which is equivalent to
+<tt>stype = 1</tt>, <tt>ctype = 1</tt>, <tt>“fleming-harrington”</tt>
+which is equivalent to <tt>stype = 2</tt>, <tt>ctype = 1</tt>, and
+<tt>“fh2”</tt> which is equivalent to <tt>stype = 2</tt> and <tt>ctype =
+2</tt>.</p>
+<p>Load the <tt>survival</tt> package for this step.</p>
+<div id="cnsr-coding-differences" class="section level4">
+<h4>2.1) CNSR Coding differences</h4>
+<div id="case-1-0-censored-and-1-event" class="section level5">
+<h5>2.1.1) Case 1: <tt>0 = “Censored”</tt> and <tt>1 = “Event”</tt></h5>
+<pre class="r"><code>library(survival)
+
+surv&lt;-survfit(Surv(aval_months, status) ~ trt01pn_, data = adtte1,
+                stype = 1, ctype = 1, conf.type = &quot;log-log&quot;, conf.int = 0.95 )
+
+print(surv, digits = 4)</code></pre>
+<pre><code>## Call: survfit(formula = Surv(aval_months, status) ~ trt01pn_, data = adtte1, 
+##     stype = 1, ctype = 1, conf.type = &quot;log-log&quot;, conf.int = 0.95)
+## 
+##                   n events median 0.95LCL 0.95UCL
+## trt01pn_=Placebo 76     55  3.515   1.873   5.060
+## trt01pn_=Active  78     62  4.238   3.647   5.552</code></pre>
+<pre class="r"><code>names(surv)</code></pre>
+<pre><code>##  [1] &quot;n&quot;         &quot;time&quot;      &quot;n.risk&quot;    &quot;n.event&quot;   &quot;n.censor&quot;  &quot;surv&quot;     
+##  [7] &quot;std.err&quot;   &quot;cumhaz&quot;    &quot;std.chaz&quot;  &quot;strata&quot;    &quot;type&quot;      &quot;logse&quot;    
+## [13] &quot;conf.int&quot;  &quot;conf.type&quot; &quot;lower&quot;     &quot;upper&quot;     &quot;t0&quot;        &quot;call&quot;</code></pre>
+</div>
+<div id="case-2-0-event-and-1-censored" class="section level5">
+<h5>2.1.2) Case 2: <tt>0 = “Event”</tt> and <tt>1 = “Censored”</tt></h5>
+<p>CDISC ADaM ADTTE dataset has variable cnsr coded as 0 for “Event” and
+1 for “Censored”. Recall R interprets 1 as “Event” and 0 as “Censored”.
+If you do not want to recode, thanks to <tt>Surv_CNSR()</tt> function
+from <tt>ggsurvfit</tt> package that takes care of that. It uses CDISC
+ADaM ADTTE coding conventions- censor = 1, status/event = 0.</p>
+<pre class="r"><code>#install.packages(&quot;ggsurvfit&quot;)
+library(ggsurvfit)
+
+survfit(Surv_CNSR(aval_months, cnsr)~ trt01pn_, data = adtte1, conf.int = 0.95,
+        stype = 1, ctype = 1, conf.type = &quot;log-log&quot;)</code></pre>
+<pre><code>## Call: survfit(formula = Surv_CNSR(aval_months, cnsr) ~ trt01pn_, data = adtte1, 
+##     stype = 1, ctype = 1, conf.int = 0.95, conf.type = &quot;log-log&quot;)
+## 
+##                   n events median 0.95LCL 0.95UCL
+## trt01pn_=Placebo 76     55   3.52    1.87    5.06
+## trt01pn_=Active  78     62   4.24    3.65    5.55</code></pre>
+</div>
+</div>
+<div id="median-pfs-dataframe-results" class="section level4">
+<h4>2.2) Median PFS Dataframe results</h4>
+<p>If you require your results for further processing use
+<tt>surv_median()</tt> function from <tt>survminer</tt> package. One can
+use results from either case 1 or case 2.</p>
+<pre class="r"><code>#install.packages(&quot;survminer&quot;)
+library(survminer)
+
+med_surv&lt;-surv_median(surv)
+
+med_surv</code></pre>
+<pre><code>##             strata   median    lower    upper
+## 1 trt01pn_=Placebo 3.515400 1.872690 5.059548
+## 2  trt01pn_=Active 4.238193 3.646817 5.552361</code></pre>
+<pre class="r"><code>med_surv&lt;- med_surv %&gt;% mutate (
+                                strata = gsub(&quot;=&quot;, &quot;&quot;, strata)
+                              , median = sprintf(&quot;%10.1f&quot;, median)
+                              , med_ci = paste(sprintf(&quot;%5.1f&quot;, lower), 
+                                               trimws(sprintf(&quot;%5.1f&quot;, upper)), 
+                                               sep = &quot; - &quot; 
+                                              )
+                               ) %&gt;% select (-c(lower, upper))
+
+med_surv</code></pre>
+<pre><code>##            strata     median      med_ci
+## 1 trt01pn_Placebo        3.5   1.9 - 5.1
+## 2  trt01pn_Active        4.2   3.6 - 5.6</code></pre>
+</div>
+<div id="and-75-survival-time-and-ci" class="section level4">
+<h4>2.3) 25% 50% and 75% survival time and CI</h4>
+<pre class="r"><code>quantile(surv, probs = c(25,50,75)/100)</code></pre>
+<pre><code>## $quantile
+##                        25       50        75
+## trt01pn_=Placebo 1.839836 3.515400 11.104723
+## trt01pn_=Active  1.872690 4.238193  9.100616
+## 
+## $lower
+##                        25       50       75
+## trt01pn_=Placebo 1.774127 1.872690 5.519507
+## trt01pn_=Active  1.675565 3.646817 5.815195
+## 
+## $upper
+##                        25       50       75
+## trt01pn_=Placebo 1.872690 5.059548       NA
+## trt01pn_=Active  3.548255 5.552361 13.73306</code></pre>
+<p>That’s all for Median PFS.</p>
+</div>
+</div>
+<div id="survival-probability-at-a-specific-timepoint-6-months"
+class="section level3">
+<h3>3. Survival Probability at a Specific Timepoint (6 Months)</h3>
+<p>For specific time points, we use the summary() function with the
+argument times =. If the specific time points are of no interest, use
+surv_summary() from the survminer package. Ultimately, to create a
+dataframe for the specific time points, one may use names() or str() to
+view the structure.</p>
+<pre class="r"><code>#with all time points at which a curve has a step
+head(surv_summary(surv))</code></pre>
+<pre><code>##         time n.risk n.event n.censor      surv    std.err     upper     lower
+## 1 0.03285421     76       0        2 1.0000000 0.00000000        NA        NA
+## 2 0.85420945     74       1        0 0.9864865 0.01360576 0.9980853 0.9079291
+## 3 0.91991786     73       1        0 0.9729730 0.01937461 0.9931713 0.8962303
+## 4 1.24845996     72       1        0 0.9594595 0.02389547 0.9867421 0.8795648
+## 5 1.64271047     71       3        0 0.9189189 0.03453069 0.9627329 0.8283998
+## 6 1.67556468     68       2        0 0.8918919 0.04047223 0.9444102 0.7954379
+##             strata trt01pn_
+## 1 trt01pn_=Placebo  Placebo
+## 2 trt01pn_=Placebo  Placebo
+## 3 trt01pn_=Placebo  Placebo
+## 4 trt01pn_=Placebo  Placebo
+## 5 trt01pn_=Placebo  Placebo
+## 6 trt01pn_=Placebo  Placebo</code></pre>
+<pre class="r"><code>#more than one specified timepoint- 0, 6, 12, 18, 24, 30
+summary(surv, times = c(0, 6*(1:5)))</code></pre>
+<pre><code>## Call: survfit(formula = Surv(aval_months, status) ~ trt01pn_, data = adtte1, 
+##     stype = 1, ctype = 1, conf.type = &quot;log-log&quot;, conf.int = 0.95)
+## 
+##                 trt01pn_=Placebo 
+##  time n.risk n.event survival std.err lower 95% CI upper 95% CI
+##     0     76       0    1.000  0.0000        1.000        1.000
+##     6     21      48    0.319  0.0563        0.213        0.430
+##    12     15       5    0.239  0.0523        0.145        0.347
+##    18      6       1    0.205  0.0549        0.110        0.321
+## 
+##                 trt01pn_=Active 
+##  time n.risk n.event survival std.err lower 95% CI upper 95% CI
+##     0     78       0   1.0000  0.0000        1.000        1.000
+##     6     23      46   0.3501  0.0573        0.241        0.461
+##    12     11      11   0.1814  0.0472        0.100        0.282
+##    18      3       5   0.0835  0.0385        0.028        0.178
+##    24      1       0   0.0835  0.0385        0.028        0.178</code></pre>
+<pre class="r"><code>#one specific timepoint- 6.
+tp&lt;-summary(surv, times = 6)
+
+tp</code></pre>
+<pre><code>## Call: survfit(formula = Surv(aval_months, status) ~ trt01pn_, data = adtte1, 
+##     stype = 1, ctype = 1, conf.type = &quot;log-log&quot;, conf.int = 0.95)
+## 
+##                 trt01pn_=Placebo 
+##         time       n.risk      n.event     survival      std.err lower 95% CI 
+##       6.0000      21.0000      48.0000       0.3190       0.0563       0.2129 
+## upper 95% CI 
+##       0.4300 
+## 
+##                 trt01pn_=Active 
+##         time       n.risk      n.event     survival      std.err lower 95% CI 
+##       6.0000      23.0000      46.0000       0.3501       0.0573       0.2406 
+## upper 95% CI 
+##       0.4614</code></pre>
+<pre class="r"><code># Inspect the structure of the summary object
+names(tp)</code></pre>
+<pre><code>##  [1] &quot;n&quot;             &quot;time&quot;          &quot;n.risk&quot;        &quot;n.event&quot;      
+##  [5] &quot;n.censor&quot;      &quot;surv&quot;          &quot;std.err&quot;       &quot;cumhaz&quot;       
+##  [9] &quot;std.chaz&quot;      &quot;strata&quot;        &quot;type&quot;          &quot;logse&quot;        
+## [13] &quot;conf.int&quot;      &quot;conf.type&quot;     &quot;lower&quot;         &quot;upper&quot;        
+## [17] &quot;t0&quot;            &quot;call&quot;          &quot;table&quot;         &quot;rmean.endtime&quot;</code></pre>
+<pre class="r"><code>str(tp)</code></pre>
+<pre><code>## List of 20
+##  $ n            : int [1:2] 76 78
+##  $ time         : num [1:2] 6 6
+##  $ n.risk       : num [1:2] 21 23
+##  $ n.event      : num [1:2] 48 46
+##  $ n.censor     : num [1:2] 7 9
+##  $ surv         : num [1:2] 0.319 0.35
+##  $ std.err      : num [1:2] 0.0563 0.0573
+##  $ cumhaz       : num [1:2] 1.11 1.02
+##  $ std.chaz     : num [1:2] 0.172 0.159
+##  $ strata       : Factor w/ 2 levels &quot;trt01pn_=Placebo&quot;,..: 1 2
+##  $ type         : chr &quot;right&quot;
+##  $ logse        : logi TRUE
+##  $ conf.int     : num 0.95
+##  $ conf.type    : chr &quot;log-log&quot;
+##  $ lower        : num [1:2] 0.213 0.241
+##  $ upper        : num [1:2] 0.43 0.461
+##  $ t0           : num 0
+##  $ call         : language survfit(formula = Surv(aval_months, status) ~ trt01pn_, data = adtte1,      stype = 1, ctype = 1, conf.type = &quot;lo| __truncated__
+##  $ table        : num [1:2, 1:9] 76 78 76 78 76 ...
+##   ..- attr(*, &quot;dimnames&quot;)=List of 2
+##   .. ..$ : chr [1:2] &quot;trt01pn_=Placebo&quot; &quot;trt01pn_=Active&quot;
+##   .. ..$ : chr [1:9] &quot;records&quot; &quot;n.max&quot; &quot;n.start&quot; &quot;events&quot; ...
+##  $ rmean.endtime: num [1:2] 27.9 27.9
+##  - attr(*, &quot;class&quot;)= chr &quot;summary.survfit&quot;</code></pre>
+<pre class="r"><code># Convert the summary to a data frame
+time_pt &lt;- data.frame(
+                        time     = tp$time    
+                      , n.risk   = tp$n.risk  
+                      , n.event  = tp$n.event 
+                      , survival = (tp$surv*100)    
+                      , std.err  = tp$std.err 
+                      , lower    = tp$lower * 100   
+                      , upper    = tp$upper * 100  
+                      , strata   = gsub(&quot;=&quot;, &quot;&quot;, tp$strata)
+)
+
+# View the data frame
+time_pt</code></pre>
+<pre><code>##   time n.risk n.event survival    std.err    lower    upper          strata
+## 1    6     21      48 31.89756 0.05633560 21.28958 42.99873 trt01pn_Placebo
+## 2    6     23      46 35.00568 0.05726304 24.05972 46.14492  trt01pn_Active</code></pre>
+<pre class="r"><code>time_pt&lt;- time_pt %&gt;% mutate(
+                            survival = sprintf(&quot;%10.1f&quot;, survival)
+                           ,tp_ci   = paste( sprintf(&quot;%5.1f&quot;, lower)
+                                           , sprintf(&quot;%5.1f&quot;, upper)
+                                           , sep= &quot; -&quot;
+                                            )
+                            ) %&gt;% select(strata, survival, tp_ci)
+
+
+time_pt</code></pre>
+<pre><code>##            strata   survival        tp_ci
+## 1 trt01pn_Placebo       31.9  21.3 - 43.0
+## 2  trt01pn_Active       35.0  24.1 - 46.1</code></pre>
+</div>
+<div id="stratified-log-rank-test" class="section level3">
+<h3>4. Stratified Log-rank test</h3>
+<p>Log-rank test- tests whether there is a significant difference in
+survival between two or more independent groups.</p>
+<p>We can use either the <tt>survdiff()</tt> function or a combination
+of <tt>survfit()</tt> and <tt>surv_pvalue()</tt> to generate the
+p-value. A combination of <tt>survfit()</tt> and <tt>surv_pvalue()</tt>
+works best if you require the results for further processing.</p>
+<div id="option-1-using-survdiff-function" class="section level4">
+<h4>Option 1: Using <tt>“survdiff”</tt> function</h4>
+<pre class="r"><code>#a.)
+survdiff(Surv(aval_months, status)~ trt01pn + strata(stratf1a), adtte1)</code></pre>
+<pre><code>## Call:
+## survdiff(formula = Surv(aval_months, status) ~ trt01pn + strata(stratf1a), 
+##     data = adtte1)
+## 
+##            N Observed Expected (O-E)^2/E (O-E)^2/V
+## trt01pn=1 78       62     63.3    0.0286    0.0715
+## trt01pn=2 76       55     53.7    0.0338    0.0715
+## 
+##  Chisq= 0.1  on 1 degrees of freedom, p= 0.8</code></pre>
+<pre class="r"><code>#b.)
+pval&lt;-survdiff(Surv_CNSR(aval_months, cnsr)~ trt01pn_ + strata(stratf1a), adtte1)
+print(pval, digits = 6)</code></pre>
+<pre><code>## Call:
+## survdiff(formula = Surv_CNSR(aval_months, cnsr) ~ trt01pn_ + 
+##     strata(stratf1a), data = adtte1)
+## 
+##                   N Observed Expected (O-E)^2/E (O-E)^2/V
+## trt01pn_=Placebo 76       55  53.6529 0.0338213  0.071467
+## trt01pn_=Active  78       62  63.3471 0.0286455  0.071467
+## 
+##  Chisq= 0.1  on 1 degrees of freedom, p= 0.7892</code></pre>
+<pre class="r"><code>###Further manually;
+pval_&lt;- 1 - pchisq(pval$chisq, length(pval$n)-1)
+pval_</code></pre>
+<pre><code>## [1] 0.7892127</code></pre>
+</div>
+<div id="option-2-using-both-survfit-and-surv_pvalue"
+class="section level4">
+<h4>Option 2: Using both <tt>survfit()</tt> and
+<tt>surv_pvalue()</tt></h4>
+<pre class="r"><code>surv1&lt;-survfit(Surv(aval_months, status) ~ trt01pn_ + strata(stratf1a), data = adtte1, 
+              stype = 1, ctype = 1, conf.int = 0.95, conf.type=&quot;log-log&quot;)
+
+pvalue&lt;-surv_pvalue(surv1)
+
+pvalue</code></pre>
+<pre><code>##                    variable      pval   method pval.txt
+## 1 trt01pn_+strata(stratf1a) 0.7892127 Log-rank p = 0.79</code></pre>
+<pre class="r"><code>pvalue&lt;-pvalue %&gt;% mutate (
+                             pval   = sprintf(&quot;%12.3f&quot;, pval)
+                           , strata = sub(&quot;\\+(.+)&quot;, &quot;Active&quot;, variable)
+                           ) %&gt;% select(pval, strata)
+
+pvalue</code></pre>
+<pre><code>##           pval         strata
+## 1        0.789 trt01pn_Active</code></pre>
+<p>The <tt>p-value</tt> from the <tt>survdiff()</tt> or
+<tt>surv_pvalue()</tt> function does not indicate which treatment is
+superior. It only tells us whether there is a significant difference
+between the survival curves. Therefore, we should use a survival plot to
+visually assess which treatment is superior.</p>
+<pre class="r"><code># Plot the survival curves
+plot&lt;-ggsurvplot(surv1, data = adtte1,
+           legend.labs = c(&quot;placebo HRRm&quot;, &quot;placebo HRRwt&quot;, &quot;active HRRm&quot;, &quot;active HRRwt&quot;),
+           xlab = &quot;Time in days&quot;, 
+           ylab = &quot;Survival probability&quot;,
+           ggtheme = theme_minimal(base_size = 15),
+           size = 0.5,  # Reduce line size
+           font.x = c(7),  # Reduce x-axis font size
+           font.y = c(7),  # Reduce y-axis font size
+           font.legend = c(7),  # Reduce legend font size
+           font.tickslab = c(6),
+           palette = c(&quot;red&quot;, &quot;red&quot;, &quot;blue&quot;, &quot;blue&quot;),
+           linetype = c(&quot;dotted&quot;, &quot;solid&quot;, &quot;dotted&quot;, &quot;solid&quot;),
+           legend = &quot;right&quot;
+           )
+
+
+plot$plot &lt;- plot$plot +
+        guides(color = guide_legend(override.aes = list(shape = NA)),  # Remove the censoring symbol
+               linetype = guide_legend(override.aes = list(shape = NA)))
+
+plot</code></pre>
+<p><img src="Journal_files/figure-html/unnamed-chunk-89-1.png" width="672" /></p>
+<p>From this plot we can observe the following:</p>
+<ol style="list-style-type: decimal">
+<li>Within strata HRRm , active drug is superior to placebo.</li>
+<li>Subjects with the wild type HRR status have better survival compared
+to those with mutant HRR status.</li>
+</ol>
+<p>The following can be use for a quick plot</p>
+<pre class="r"><code>#ggfortify enables use of autoplot
+#install.packages(&quot;ggfortify&quot;)
+library(ggfortify)
+
+autoplot(surv1)</code></pre>
+<p><img src="Journal_files/figure-html/unnamed-chunk-90-1.png" width="672" /></p>
+</div>
+</div>
+<div id="cox-proportional-hazards-model-cphm" class="section level3">
+<h3>5. Cox Proportional Hazards Model (CPHM)</h3>
+<p>Used to fit regression models to censored survival data. It accounts
+for the effects of continuous and discrete covariate (independent
+variable) measurements when the dependent variable is possibly censored
+time-to-event data.</p>
+<p>It assumes that the effects of the independent variables upon
+survival are constant over time and are additive in one scale.</p>
+<p>When an independent variable is categorical, it’s important to choose
+a baseline/reference group, as hazard ratios are calculated by comparing
+the other levels to the reference group.</p>
+<p><em>Hazard function</em> is the conditional probability that an event
+will occur at time <em>t</em> having survived to that time.</p>
+<div id="unadjusted-cox-regression" class="section level4">
+<h4>5.1) Unadjusted Cox Regression</h4>
+<p>The estimate of the log hazard ratio treatment effect, <span
+class="math inline">\(\hat{\beta}\)</span> is 0.05214. Since this is
+positive, higher hazards are associated with the active drug than with
+the placebo. That is, the active drug appears to reduce survival- quite
+unfortunate. The value of exp(<span
+class="math inline">\(\hat{\beta}\)</span>) is 1.054 meaning the risk of
+death/disease progression is higher on the active drug by about
+5.4%.</p>
+<pre class="r"><code>cox&lt;-coxph(Surv(aval_months, status) ~ trt01pn_ , data = adtte1
+                          , ties=&quot;efron&quot;) 
+
+cox</code></pre>
+<pre><code>## Call:
+## coxph(formula = Surv(aval_months, status) ~ trt01pn_, data = adtte1, 
+##     ties = &quot;efron&quot;)
+## 
+##                   coef exp(coef) se(coef)    z    p
+## trt01pn_Active 0.05214   1.05352  0.18626 0.28 0.78
+## 
+## Likelihood ratio test=0.08  on 1 df, p=0.7794
+## n= 154, number of events= 117</code></pre>
+</div>
+<div id="adjusted-cox-regression" class="section level4">
+<h4>5.2) Adjusted Cox Regression</h4>
+<div id="stratified-cox-model" class="section level5">
+<h5>Stratified Cox Model</h5>
+<p>The coefficient is now negative. This means within each
+stratification, the active drug is effective.</p>
+<pre class="r"><code>cox&lt;-coxph(Surv(aval_months, status) ~ trt01pn_ + strata(stratf1a), data = adtte1
+                          , ties=&quot;efron&quot;) 
+
+cox</code></pre>
+<pre><code>## Call:
+## coxph(formula = Surv(aval_months, status) ~ trt01pn_ + strata(stratf1a), 
+##     data = adtte1, ties = &quot;efron&quot;)
+## 
+##                    coef exp(coef) se(coef)      z     p
+## trt01pn_Active -0.05832   0.94335  0.19634 -0.297 0.766
+## 
+## Likelihood ratio test=0.09  on 1 df, p=0.7664
+## n= 154, number of events= 117</code></pre>
+<p>We can also explicitly estimate the stratification effect.</p>
+<pre class="r"><code>cox&lt;-coxph(Surv(aval_months, status) ~ trt01pn_ + stratf1a, data = adtte1
+                          , ties=&quot;efron&quot;) 
+
+summary(cox)</code></pre>
+<pre><code>## Call:
+## coxph(formula = Surv(aval_months, status) ~ trt01pn_ + stratf1a, 
+##     data = adtte1, ties = &quot;efron&quot;)
+## 
+##   n= 154, number of events= 117 
+## 
+##                    coef exp(coef) se(coef)      z Pr(&gt;|z|)  
+## trt01pn_Active -0.04876   0.95241  0.19349 -0.252   0.8011  
+## stratf1aHRRwt  -0.53092   0.58806  0.23021 -2.306   0.0211 *
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##                exp(coef) exp(-coef) lower .95 upper .95
+## trt01pn_Active    0.9524       1.05    0.6518    1.3916
+## stratf1aHRRwt     0.5881       1.70    0.3745    0.9234
+## 
+## Concordance= 0.534  (se = 0.028 )
+## Likelihood ratio test= 4.99  on 2 df,   p=0.08
+## Wald test            = 5.46  on 2 df,   p=0.07
+## Score (logrank) test = 5.58  on 2 df,   p=0.06</code></pre>
+<p>Again the co-efficient associated with the active drug is negative.
+The stratum HRRwt has negative co-efficient and thus is associated with
+lower hazard than the reference HRRm.</p>
+</div>
+</div>
+<div id="options-of-viewing-results." class="section level4">
+<h4>Options of viewing results.</h4>
+<ol style="list-style-type: decimal">
+<li><p><tt>summmary()</tt></p></li>
+<li><p><tt>tbl_regression</tt></p></li>
+</ol>
+<ul>
+<li>Comes from the gtsummary package.</li>
+<li>Used to display results in a formatted table</li>
+</ul>
+<pre class="r"><code>#install.packages(&quot;gtsummary&quot;)
+ library (gtsummary)
+ cox %&gt;% tbl_regression(exp = T)</code></pre>
+<div id="iiourmrrnd" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#iiourmrrnd table {
+  font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#iiourmrrnd thead, #iiourmrrnd tbody, #iiourmrrnd tfoot, #iiourmrrnd tr, #iiourmrrnd td, #iiourmrrnd th {
+  border-style: none;
+}
+
+#iiourmrrnd p {
+  margin: 0;
+  padding: 0;
+}
+
+#iiourmrrnd .gt_table {
+  display: table;
+  border-collapse: collapse;
+  line-height: normal;
+  margin-left: auto;
+  margin-right: auto;
+  color: #333333;
+  font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
+  background-color: #FFFFFF;
+  width: auto;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #A8A8A8;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #A8A8A8;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_caption {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+#iiourmrrnd .gt_title {
+  color: #333333;
+  font-size: 125%;
+  font-weight: initial;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-color: #FFFFFF;
+  border-bottom-width: 0;
+}
+
+#iiourmrrnd .gt_subtitle {
+  color: #333333;
+  font-size: 85%;
+  font-weight: initial;
+  padding-top: 3px;
+  padding-bottom: 5px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-top-color: #FFFFFF;
+  border-top-width: 0;
+}
+
+#iiourmrrnd .gt_heading {
+  background-color: #FFFFFF;
+  text-align: center;
+  border-bottom-color: #FFFFFF;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_bottom_border {
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_col_headings {
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_col_heading {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: normal;
+  text-transform: inherit;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: bottom;
+  padding-top: 5px;
+  padding-bottom: 6px;
+  padding-left: 5px;
+  padding-right: 5px;
+  overflow-x: hidden;
+}
+
+#iiourmrrnd .gt_column_spanner_outer {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: normal;
+  text-transform: inherit;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+#iiourmrrnd .gt_column_spanner_outer:first-child {
+  padding-left: 0;
+}
+
+#iiourmrrnd .gt_column_spanner_outer:last-child {
+  padding-right: 0;
+}
+
+#iiourmrrnd .gt_column_spanner {
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  vertical-align: bottom;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  overflow-x: hidden;
+  display: inline-block;
+  width: 100%;
+}
+
+#iiourmrrnd .gt_spanner_row {
+  border-bottom-style: hidden;
+}
+
+#iiourmrrnd .gt_group_heading {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: middle;
+  text-align: left;
+}
+
+#iiourmrrnd .gt_empty_group_heading {
+  padding: 0.5px;
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  vertical-align: middle;
+}
+
+#iiourmrrnd .gt_from_md > :first-child {
+  margin-top: 0;
+}
+
+#iiourmrrnd .gt_from_md > :last-child {
+  margin-bottom: 0;
+}
+
+#iiourmrrnd .gt_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  margin: 10px;
+  border-top-style: solid;
+  border-top-width: 1px;
+  border-top-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 1px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 1px;
+  border-right-color: #D3D3D3;
+  vertical-align: middle;
+  overflow-x: hidden;
+}
+
+#iiourmrrnd .gt_stub {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-right-style: solid;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#iiourmrrnd .gt_stub_row_group {
+  color: #333333;
+  background-color: #FFFFFF;
+  font-size: 100%;
+  font-weight: initial;
+  text-transform: inherit;
+  border-right-style: solid;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+  padding-left: 5px;
+  padding-right: 5px;
+  vertical-align: top;
+}
+
+#iiourmrrnd .gt_row_group_first td {
+  border-top-width: 2px;
+}
+
+#iiourmrrnd .gt_row_group_first th {
+  border-top-width: 2px;
+}
+
+#iiourmrrnd .gt_summary_row {
+  color: #333333;
+  background-color: #FFFFFF;
+  text-transform: inherit;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#iiourmrrnd .gt_first_summary_row {
+  border-top-style: solid;
+  border-top-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_first_summary_row.thick {
+  border-top-width: 2px;
+}
+
+#iiourmrrnd .gt_last_summary_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_grand_summary_row {
+  color: #333333;
+  background-color: #FFFFFF;
+  text-transform: inherit;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#iiourmrrnd .gt_first_grand_summary_row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-top-style: double;
+  border-top-width: 6px;
+  border-top-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_last_grand_summary_row_top {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-bottom-style: double;
+  border-bottom-width: 6px;
+  border-bottom-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_striped {
+  background-color: rgba(128, 128, 128, 0.05);
+}
+
+#iiourmrrnd .gt_table_body {
+  border-top-style: solid;
+  border-top-width: 2px;
+  border-top-color: #D3D3D3;
+  border-bottom-style: solid;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_footnotes {
+  color: #333333;
+  background-color: #FFFFFF;
+  border-bottom-style: none;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_footnote {
+  margin: 0px;
+  font-size: 90%;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#iiourmrrnd .gt_sourcenotes {
+  color: #333333;
+  background-color: #FFFFFF;
+  border-bottom-style: none;
+  border-bottom-width: 2px;
+  border-bottom-color: #D3D3D3;
+  border-left-style: none;
+  border-left-width: 2px;
+  border-left-color: #D3D3D3;
+  border-right-style: none;
+  border-right-width: 2px;
+  border-right-color: #D3D3D3;
+}
+
+#iiourmrrnd .gt_sourcenote {
+  font-size: 90%;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+#iiourmrrnd .gt_left {
+  text-align: left;
+}
+
+#iiourmrrnd .gt_center {
+  text-align: center;
+}
+
+#iiourmrrnd .gt_right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#iiourmrrnd .gt_font_normal {
+  font-weight: normal;
+}
+
+#iiourmrrnd .gt_font_bold {
+  font-weight: bold;
+}
+
+#iiourmrrnd .gt_font_italic {
+  font-style: italic;
+}
+
+#iiourmrrnd .gt_super {
+  font-size: 65%;
+}
+
+#iiourmrrnd .gt_footnote_marks {
+  font-size: 75%;
+  vertical-align: 0.4em;
+  position: initial;
+}
+
+#iiourmrrnd .gt_asterisk {
+  font-size: 100%;
+  vertical-align: 0;
+}
+
+#iiourmrrnd .gt_indent_1 {
+  text-indent: 5px;
+}
+
+#iiourmrrnd .gt_indent_2 {
+  text-indent: 10px;
+}
+
+#iiourmrrnd .gt_indent_3 {
+  text-indent: 15px;
+}
+
+#iiourmrrnd .gt_indent_4 {
+  text-indent: 20px;
+}
+
+#iiourmrrnd .gt_indent_5 {
+  text-indent: 25px;
+}
+
+#iiourmrrnd .katex-display {
+  display: inline-flex !important;
+  margin-bottom: 0.75em !important;
+}
+
+#iiourmrrnd div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+  height: 0px !important;
+}
+</style>
+<table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
+  <thead>
+    <tr class="gt_col_headings">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="&lt;span class='gt_from_md'&gt;&lt;strong&gt;Characteristic&lt;/strong&gt;&lt;/span&gt;"><span class='gt_from_md'><strong>Characteristic</strong></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;span class='gt_from_md'&gt;&lt;strong&gt;HR&lt;/strong&gt;&lt;/span&gt;&lt;span class=&quot;gt_footnote_marks&quot; style=&quot;white-space:nowrap;font-style:italic;font-weight:normal;line-height: 0;&quot;&gt;&lt;sup&gt;1&lt;/sup&gt;&lt;/span&gt;"><span class='gt_from_md'><strong>HR</strong></span><span class="gt_footnote_marks" style="white-space:nowrap;font-style:italic;font-weight:normal;line-height: 0;"><sup>1</sup></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;span class='gt_from_md'&gt;&lt;strong&gt;95% CI&lt;/strong&gt;&lt;/span&gt;&lt;span class=&quot;gt_footnote_marks&quot; style=&quot;white-space:nowrap;font-style:italic;font-weight:normal;line-height: 0;&quot;&gt;&lt;sup&gt;1&lt;/sup&gt;&lt;/span&gt;"><span class='gt_from_md'><strong>95% CI</strong></span><span class="gt_footnote_marks" style="white-space:nowrap;font-style:italic;font-weight:normal;line-height: 0;"><sup>1</sup></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="&lt;span class='gt_from_md'&gt;&lt;strong&gt;p-value&lt;/strong&gt;&lt;/span&gt;"><span class='gt_from_md'><strong>p-value</strong></span></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="label" class="gt_row gt_left">trt01pn_</td>
+<td headers="estimate" class="gt_row gt_center"><br /></td>
+<td headers="conf.low" class="gt_row gt_center"><br /></td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    Placebo</td>
+<td headers="estimate" class="gt_row gt_center">—</td>
+<td headers="conf.low" class="gt_row gt_center">—</td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    Active</td>
+<td headers="estimate" class="gt_row gt_center">0.95</td>
+<td headers="conf.low" class="gt_row gt_center">0.65, 1.39</td>
+<td headers="p.value" class="gt_row gt_center">0.8</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">stratf1a</td>
+<td headers="estimate" class="gt_row gt_center"><br /></td>
+<td headers="conf.low" class="gt_row gt_center"><br /></td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    HRRm</td>
+<td headers="estimate" class="gt_row gt_center">—</td>
+<td headers="conf.low" class="gt_row gt_center">—</td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    HRRwt</td>
+<td headers="estimate" class="gt_row gt_center">0.59</td>
+<td headers="conf.low" class="gt_row gt_center">0.37, 0.92</td>
+<td headers="p.value" class="gt_row gt_center">0.021</td></tr>
+  </tbody>
+  
+  <tfoot class="gt_footnotes">
+    <tr>
+      <td class="gt_footnote" colspan="4"><span class="gt_footnote_marks" style="white-space:nowrap;font-style:italic;font-weight:normal;line-height: 0;"><sup>1</sup></span> <span class='gt_from_md'>HR = Hazard Ratio, CI = Confidence Interval</span></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+<ol start="3" style="list-style-type: decimal">
+<li><tt>tidy ()</tt></li>
+</ol>
+<p>Comes from the <tt>broom</tt> package. Presents results as a
+dataframe. Useful if results are required for further processing. To
+explore this function further, use <tt>?tidy.coxph</tt>.</p>
+<pre class="r"><code>library(broom)  
+
+cox.df&lt;-cox %&gt;% 
+        tidy(conf.int = TRUE, exponentiate = TRUE) %&gt;% 
+        select(term, estimate, starts_with(&quot;conf&quot;))
+
+cox.df&lt;-cox.df %&gt;% mutate(
+                           hr    = sprintf(&quot;%11.2f&quot;, estimate)
+                         , hr_ci = paste(sprintf(&quot;%6.2f&quot;, conf.low)
+                                       , gsub(&quot;^\\s+&quot;,&quot;&quot;,sprintf(&quot;%6.2f&quot;, conf.high))
+                                       , sep = &quot; - &quot;)
+                         ) %&gt;% 
+        select (strata = term, starts_with(&quot;hr&quot;))
+        
+print(cox.df)</code></pre>
+<pre><code>## # A tibble: 2 × 3
+##   strata         hr            hr_ci          
+##   &lt;chr&gt;          &lt;chr&gt;         &lt;chr&gt;          
+## 1 trt01pn_Active &quot;       0.95&quot; &quot;  0.65 - 1.39&quot;
+## 2 stratf1aHRRwt  &quot;       0.59&quot; &quot;  0.37 - 0.92&quot;</code></pre>
+</div>
+</div>
+<div id="reporting-effort" class="section level3">
+<h3>6. Reporting Effort</h3>
+<div id="combining-the-four-datasets" class="section level4">
+<h4>Combining the Four Datasets</h4>
+<p>In this analysis, we have already derived key survival statistical
+metrics which are stored in the following datasets:</p>
+<ol style="list-style-type: decimal">
+<li><p><strong>Median Progression-Free Survival (PFS)</strong>: The
+median survival time is provided in the med_surv dataset.</p></li>
+<li><p><strong>PFS Rate at 6 Months</strong>: The PFS rate at the
+6-month time point is included in the time_pt dataset.</p></li>
+<li><p><strong>Hazard Ratio</strong>: The hazard ratio is in the cox.df
+dataset.</p></li>
+<li><p><strong>2-Sided p-Value</strong>: The 2-sided p-value, obtained
+through a stratified log-rank test, is available in the pvalue
+dataset.</p></li>
+</ol>
+<p>These datasets will be combined to create our report and produce a
+PFS efficacy table using the mock shell provided.</p>
+<pre class="r"><code>complete_data&lt;-bind_rows(med_surv, time_pt, cox.df, pvalue)
+
+complete_data</code></pre>
+<pre><code>##            strata     median      med_ci   survival        tp_ci          hr
+## 1 trt01pn_Placebo        3.5   1.9 - 5.1       &lt;NA&gt;         &lt;NA&gt;        &lt;NA&gt;
+## 2  trt01pn_Active        4.2   3.6 - 5.6       &lt;NA&gt;         &lt;NA&gt;        &lt;NA&gt;
+## 3 trt01pn_Placebo       &lt;NA&gt;        &lt;NA&gt;       31.9  21.3 - 43.0        &lt;NA&gt;
+## 4  trt01pn_Active       &lt;NA&gt;        &lt;NA&gt;       35.0  24.1 - 46.1        &lt;NA&gt;
+## 5  trt01pn_Active       &lt;NA&gt;        &lt;NA&gt;       &lt;NA&gt;         &lt;NA&gt;        0.95
+## 6   stratf1aHRRwt       &lt;NA&gt;        &lt;NA&gt;       &lt;NA&gt;         &lt;NA&gt;        0.59
+## 7  trt01pn_Active       &lt;NA&gt;        &lt;NA&gt;       &lt;NA&gt;         &lt;NA&gt;        &lt;NA&gt;
+##           hr_ci         pval
+## 1          &lt;NA&gt;         &lt;NA&gt;
+## 2          &lt;NA&gt;         &lt;NA&gt;
+## 3          &lt;NA&gt;         &lt;NA&gt;
+## 4          &lt;NA&gt;         &lt;NA&gt;
+## 5   0.65 - 1.39         &lt;NA&gt;
+## 6   0.37 - 0.92         &lt;NA&gt;
+## 7          &lt;NA&gt;        0.789</code></pre>
+</div>
+</div>
+<div id="transpose-data-to-shell-format" class="section level3">
+<h3>7. Transpose data to shell format</h3>
+<pre class="r"><code>complete_data_t&lt;-complete_data %&gt;% pivot_longer(cols=c(median
+                                                       , med_ci
+                                                       , survival
+                                                       , tp_ci
+                                                       , hr, hr_ci, pval ),
+                       names_to=&quot;description&quot;
+                       , values_to=&quot;stat&quot;) %&gt;% 
+        na.omit() %&gt;% 
+        pivot_wider(names_from = strata, values_from = stat) %&gt;%
+        mutate(
+                description = gsub(&quot;^medi\\w+&quot;, &quot;Median progression-free survival (months)&quot;,                                          description) 
+              , description = str_replace(description, &quot;^med_\\w+&quot;
+                                            , &quot;95% CI for Median progression-free survival&quot;)
+              , description = gsub(&quot;^sur\\w+&quot;
+                  , &quot;Alive and progression-free survival rate at 6 months (APF6) (%)&quot;, description) 
+              , description = gsub(&quot;^tp_\\w+&quot;
+                            , &quot;95% CI for progression-free survival rate at 6 months&quot;, description)
+              , description = gsub(&quot;^hr$&quot;
+                  , &quot;Hazard ratio, Active drug versus Placebo (standard treatment)&quot;, description )
+              , description = gsub(&quot;^hr_\\w+&quot;, &quot;95% CI for hazard ratio &quot;, description )
+              , description = gsub(&quot;^pval$&quot;, &quot;2-sided p-value&quot;, description )
+            ) %&gt;% select (description, trt01pn_Active, trt01pn_Placebo)
+
+complete_data_t</code></pre>
+<pre><code>## # A tibble: 7 × 3
+##   description                                     trt01pn_Active trt01pn_Placebo
+##   &lt;chr&gt;                                           &lt;chr&gt;          &lt;chr&gt;          
+## 1 &quot;Median progression-free survival (months)&quot;     &quot;       4.2&quot;   &quot;       3.5&quot;   
+## 2 &quot;95% CI for Median progression-free survival&quot;   &quot;  3.6 - 5.6&quot;  &quot;  1.9 - 5.1&quot;  
+## 3 &quot;Alive and progression-free survival rate at 6… &quot;      35.0&quot;   &quot;      31.9&quot;   
+## 4 &quot;95% CI for progression-free survival rate at … &quot; 24.1 - 46.1&quot; &quot; 21.3 - 43.0&quot; 
+## 5 &quot;Hazard ratio, Active drug versus Placebo (sta… &quot;       0.95&quot;   &lt;NA&gt;          
+## 6 &quot;95% CI for hazard ratio &quot;                      &quot;  0.65 - 1.3…  &lt;NA&gt;          
+## 7 &quot;2-sided p-value&quot;                               &quot;       0.789&quot;  &lt;NA&gt;</code></pre>
+<p>This is the final report, which aligns with the requirements outlined
+in the mock shell.</p>
+<p><img
+src="images/pfs.png"
+style="width:100.0%" /></p>
+</div>
+</div>
+<div id="baseline-flag" class="section level1">
+<h1>Baseline Flag</h1>
+<p>Consider the following VS dataset.</p>
+<pre class="r"><code>vs &lt;- data.frame(
+        usubjid = rep(c(01, 02), c(8, 2))                                      ,
+        paramcd = c(&quot;AB&quot;, &quot;AB&quot;, &quot;BA&quot;, &quot;BA&quot;, &quot;BA&quot;, &quot;BA&quot;, &quot;CD&quot;, &quot;CD&quot;, &quot;BA&quot;, &quot;BA&quot;),
+        aval    = c(23, 45, 18, 196, 19.2, 8.6, 45, NA, 200, NA)               ,
+        adt     = as.Date (c(&#39;2003-09-06&#39;, &#39;2003-09-05&#39;, &#39;2003-09-05&#39;, 
+                             &#39;2003-09-06&#39;, &#39;2003-11-21&#39;, &#39;2003-10-15&#39;,
+                             &quot;2003-09-05&quot;, &quot;2003-09-06&quot;, &quot;2003-10-01&quot;,
+                             &quot;2003-10-02&quot;)
+                          )                                                    ,
+        trtsdt  = as.Date(rep(&quot;2003-09-07&quot;, times=10))
+        )
+
+vs</code></pre>
+<pre><code>##    usubjid paramcd  aval        adt     trtsdt
+## 1        1      AB  23.0 2003-09-06 2003-09-07
+## 2        1      AB  45.0 2003-09-05 2003-09-07
+## 3        1      BA  18.0 2003-09-05 2003-09-07
+## 4        1      BA 196.0 2003-09-06 2003-09-07
+## 5        1      BA  19.2 2003-11-21 2003-09-07
+## 6        1      BA   8.6 2003-10-15 2003-09-07
+## 7        1      CD  45.0 2003-09-05 2003-09-07
+## 8        1      CD    NA 2003-09-06 2003-09-07
+## 9        2      BA 200.0 2003-10-01 2003-09-07
+## 10       2      BA    NA 2003-10-02 2003-09-07</code></pre>
+<div id="derive-baseline-flag" class="section level3">
+<h3>Derive baseline flag</h3>
+<p>To maintain clean code and avoid slicing and re-merging, I use the
+following logic. This approach is inspired by Mazi 🔵 Ntintelo’s post on
+’Deriving Baseline Flags using SAS.</p>
+<pre class="r"><code>vs1&lt;- vs %&gt;% 
+        #Check qualifier for baseline flag
+        mutate(anchor = ifelse(!is.na(aval) &amp; !is.na(adt) &amp; adt &lt; trtsdt , 1, 2)) %&gt;%
+        arrange (usubjid, paramcd, anchor, adt) %&gt;%
+        group_by(usubjid, paramcd, anchor) %&gt;%
+        mutate ( nparam = row_number(),
+                 #check if its the last Paramcd i.e npram=lparam
+                 lparam = last(nparam), 
+                 ablfl  = ifelse(lparam == nparam &amp; anchor == 1, &quot;Y&quot;, NA)
+        )  %&gt;% 
+        select (-c(nparam, lparam)) 
+
+vs1</code></pre>
+<pre><code>## # A tibble: 10 × 7
+## # Groups:   usubjid, paramcd, anchor [6]
+##    usubjid paramcd  aval adt        trtsdt     anchor ablfl
+##      &lt;dbl&gt; &lt;chr&gt;   &lt;dbl&gt; &lt;date&gt;     &lt;date&gt;      &lt;dbl&gt; &lt;chr&gt;
+##  1       1 AB       45   2003-09-05 2003-09-07      1 &lt;NA&gt; 
+##  2       1 AB       23   2003-09-06 2003-09-07      1 Y    
+##  3       1 BA       18   2003-09-05 2003-09-07      1 &lt;NA&gt; 
+##  4       1 BA      196   2003-09-06 2003-09-07      1 Y    
+##  5       1 BA        8.6 2003-10-15 2003-09-07      2 &lt;NA&gt; 
+##  6       1 BA       19.2 2003-11-21 2003-09-07      2 &lt;NA&gt; 
+##  7       1 CD       45   2003-09-05 2003-09-07      1 Y    
+##  8       1 CD       NA   2003-09-06 2003-09-07      2 &lt;NA&gt; 
+##  9       2 BA      200   2003-10-01 2003-09-07      2 &lt;NA&gt; 
+## 10       2 BA       NA   2003-10-02 2003-09-07      2 &lt;NA&gt;</code></pre>
+</div>
+</div>
 
 
 

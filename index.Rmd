@@ -31,6 +31,8 @@ The third project involves creating a Shift Table. With both basic and advanced 
 The fourth project is a Progression Free Survival (PFS) table. Here, a high-level
 understanding of Survival analysis is a requirement!
 
+Finally we look at the derivation of a baseline flag. This is achieved without slicing and re-merging- an approach that is less common but more efficient, inspired by Mazi 🔵 Ntintelo’s post. I replicate this idea in R.
+
 ## Projects covered
 
 1. Data Manipulation & Visualization
@@ -44,7 +46,9 @@ understanding of Survival analysis is a requirement!
 
 3. ECG Shift Table
 
-3. Progression-Free Survival (PFS) Table
+4. Progression-Free Survival (PFS) Table
+
+5. Baseline Flag
 
 
 

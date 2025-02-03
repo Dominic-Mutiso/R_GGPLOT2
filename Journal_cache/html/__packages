@@ -25,3 +25,8 @@ htmlwidgets
 GGally
 haven
 flextable
+survival
+ggsurvfit
+survminer
+ggfortify
+gtsummary
